@@ -1,20 +1,37 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# NovaTrade Analytics
 
-# Run and deploy your AI Studio app
+NovaTrade is a modern, real-time stock market simulation and analytics platform. It provides users with a dynamic dashboard to track market trends, manage a portfolio, and analyze stock performance with interactive charts.
 
-This contains everything you need to run your app locally.
+## Features
 
-View your app in AI Studio: https://ai.studio/apps/drive/1ShQHBOjklcctE64Z6vE4VlGeZY5WgJIG
+- **Live Market Dashboard**: Real-time ticker updates and market snapshots.
+- **Interactive Charts**: Dynamic price history visualizations using Recharts.
+- **Market Management**: Customize the simulation by adding, editing, or removing companies.
+- **Portfolio Tracking**: Monitor simulated holdings and performance.
+- **Responsive Design**: Built with a mobile-first approach for verified usability across devices.
 
-## Run Locally
+## Tech Stack
 
-**Prerequisites:**  Node.js
+- **Framework**: React 19
+- **Build Tool**: Vite
+- **Language**: TypeScript
+- **Styling**: TailwindCSS
+- **Icons**: Lucide React
+- **Charting**: Recharts
 
+## Getting Started
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+1. **Install dependencies**
+
+   ```bash
+   npm install
+   ```
+
+2. **Run the development server**
+
+   ```bash
+   npm run dev
+   ```
+
+3. **Open the application**
+   Navigate to `http://localhost:3000` in your browser.
