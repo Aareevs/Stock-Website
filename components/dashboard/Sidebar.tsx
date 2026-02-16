@@ -3,33 +3,31 @@ import {
   LayoutDashboard, 
   LineChart, 
   Wallet, 
-  Newspaper, 
-  Users, 
-  Settings, 
-  LogOut,
+  Trophy,
+  Shield,
   Search
 } from 'lucide-react';
 
 interface SidebarProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
-  onLogout: () => void;
+  onOpenAdmin: () => void;
+  currentUserName?: string;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLogout }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onOpenAdmin, currentUserName }) => {
   const navItems = [
     { icon: LayoutDashboard, label: 'Overview' },
     { icon: LineChart, label: 'Markets' },
     { icon: Wallet, label: 'Portfolio' },
-    { icon: Newspaper, label: 'News Feed' },
-    { icon: Users, label: 'Community' },
+    { icon: Trophy, label: 'Leaderboard' },
   ];
 
   return (
     <aside className="hidden md:flex flex-col w-20 lg:w-64 h-screen sticky top-0 border-r border-border bg-background pt-6 pb-4 transition-all duration-300">
-      <div className="px-6 mb-10 flex items-center gap-3">
-        <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-primary to-blue-500 flex-shrink-0" />
-        <span className="text-xl font-bold tracking-tight text-textMain hidden lg:block">NovaTrade</span>
+      <div className="px-3 mb-10 flex items-center justify-center lg:justify-start gap-2">
+        <img src="/vsx-logo.png" alt="VSX" className="h-14 flex-shrink-0" />
+        <span className="text-xs font-bold tracking-wider text-primary hidden lg:block uppercase">VSX</span>
       </div>
 
       <div className="px-4 mb-6 hidden lg:block">
@@ -56,24 +54,23 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLog
           >
             <item.icon className={`w-5 h-5 ${activeTab === item.label ? 'text-primary' : 'text-textMuted group-hover:text-textMain'}`} />
             <span className="font-medium hidden lg:block">{item.label}</span>
-            {item.label === 'News Feed' && (
-              <span className="ml-auto w-2 h-2 rounded-full bg-primary hidden lg:block" />
-            )}
           </button>
         ))}
       </nav>
 
       <div className="px-3 mt-auto space-y-1 border-t border-border pt-4">
-        <button className="w-full flex items-center gap-3 px-3 py-3 rounded-lg text-textMuted hover:text-textMain hover:bg-surface/50 transition-colors">
-          <Settings className="w-5 h-5" />
-          <span className="font-medium hidden lg:block">Settings</span>
-        </button>
+        {currentUserName && (
+          <div className="px-3 py-2 mb-2 hidden lg:block">
+            <span className="text-xs text-textMuted block">Logged in as</span>
+            <span className="text-sm font-semibold text-textMain truncate block">{currentUserName}</span>
+          </div>
+        )}
         <button 
-          onClick={onLogout}
-          className="w-full flex items-center gap-3 px-3 py-3 rounded-lg text-textMuted hover:text-negative/80 hover:bg-negative/10 transition-colors"
+          onClick={onOpenAdmin}
+          className="w-full flex items-center gap-3 px-3 py-3 rounded-lg text-textMuted hover:text-textMain hover:bg-surface/50 transition-colors"
         >
-          <LogOut className="w-5 h-5" />
-          <span className="font-medium hidden lg:block">Logout</span>
+          <Shield className="w-5 h-5" />
+          <span className="font-medium hidden lg:block">Admin Panel</span>
         </button>
       </div>
     </aside>

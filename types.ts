@@ -11,14 +11,6 @@ export interface Metric {
   history: { value: number }[];
 }
 
-export interface Creator {
-  id: string;
-  name: string;
-  handle: string;
-  avatar: string;
-  sentiment: 'positive' | 'neutral' | 'negative';
-}
-
 export interface MarketItem {
   name: string;
   symbol: string;
@@ -26,6 +18,7 @@ export interface MarketItem {
   change: number;
   sentiment: 'Bullish' | 'Bearish' | 'Neutral';
   icon: string;
+  priceHistory: StockDataPoint[];
 }
 
 export interface PortfolioItem {
@@ -35,7 +28,31 @@ export interface PortfolioItem {
   avgPrice: number;
 }
 
+export interface Transaction {
+  id: string;
+  symbol: string;
+  assetName: string;
+  type: 'BUY' | 'SELL';
+  quantity: number;
+  price: number;
+  purchasePrice?: number;
+  timestamp: number;
+  profitLoss?: number;
+}
+
+export interface User {
+  id: string;
+  username: string;
+  password: string;
+  displayName: string;
+  startingCapital: number;
+  cashBalance: number;
+  portfolio: PortfolioItem[];
+  transactions: Transaction[];
+}
+
 export enum ViewState {
-  LANDING = 'LANDING',
-  DASHBOARD = 'DASHBOARD'
+  DASHBOARD = 'DASHBOARD',
+  ADMIN_LOGIN = 'ADMIN_LOGIN',
+  ADMIN_DASHBOARD = 'ADMIN_DASHBOARD',
 }

@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { X, ArrowRight, Wallet, TrendingUp, TrendingDown } from 'lucide-react';
+import React, { useState } from 'react';
+import { X, Wallet, TrendingUp, TrendingDown, History } from 'lucide-react';
 import { Button } from '../ui/Button';
-import { MarketItem } from '../../types';
+import { MarketItem, Transaction } from '../../types';
 
 interface TradeModalProps {
   isOpen: boolean;
@@ -10,6 +10,7 @@ interface TradeModalProps {
   balance: number;
   onConfirm: (type: 'buy' | 'sell', quantity: number) => void;
   ownedQuantity: number;
+  transactions?: Transaction[];
 }
 
 export const TradeModal: React.FC<TradeModalProps> = ({ 
@@ -18,7 +19,8 @@ export const TradeModal: React.FC<TradeModalProps> = ({
   asset, 
   balance, 
   onConfirm,
-  ownedQuantity
+  ownedQuantity,
+  transactions = []
 }) => {
   const [type, setType] = useState<'buy' | 'sell'>('buy');
   const [quantity, setQuantity] = useState<string>('1');
@@ -31,6 +33,8 @@ export const TradeModal: React.FC<TradeModalProps> = ({
   const canSell = type === 'sell' && qty <= ownedQuantity && qty > 0;
   const isValid = type === 'buy' ? canBuy : canSell;
 
+  const recentTx = transactions.slice(0, 5);
+
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
       <div 
@@ -38,7 +42,7 @@ export const TradeModal: React.FC<TradeModalProps> = ({
         onClick={onClose}
       />
       
-      <div className="relative w-full max-w-sm bg-surface border border-border rounded-xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+      <div className="relative w-full max-w-sm bg-surface border border-border rounded-xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col">
         <div className="px-6 py-4 border-b border-border flex justify-between items-center">
           <div>
             <h3 className="text-lg font-bold text-textMain flex items-center gap-2">
@@ -49,15 +53,15 @@ export const TradeModal: React.FC<TradeModalProps> = ({
           <button onClick={onClose} className="text-textMuted hover:text-textMain"><X className="w-5 h-5" /></button>
         </div>
 
-        <div className="p-6 space-y-6">
+        <div className="p-6 space-y-6 overflow-y-auto">
           {/* Price Info */}
           <div className="flex justify-between items-center bg-surfaceElevated p-3 rounded-lg">
             <span className="text-sm text-textMuted">Current Price</span>
             <div className="text-right">
-              <div className="font-bold text-lg">${asset.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+              <div className="font-bold text-lg font-mono">₹{asset.price.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
               <div className={`text-xs flex items-center justify-end gap-1 ${asset.change >= 0 ? 'text-primary' : 'text-negative'}`}>
                  {asset.change >= 0 ? <TrendingUp className="w-3 h-3"/> : <TrendingDown className="w-3 h-3"/>}
-                 {asset.change}%
+                 {asset.change >= 0 ? '+' : ''}{asset.change.toFixed(2)}%
               </div>
             </div>
           </div>
@@ -94,14 +98,14 @@ export const TradeModal: React.FC<TradeModalProps> = ({
                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-textMuted font-medium">{asset.symbol}</span>
                 </div>
                 <div className="flex justify-between mt-2 text-xs">
-                   <span className="text-textMuted">Available: {ownedQuantity.toFixed(4)} {asset.symbol}</span>
+                   <span className="text-textMuted">Owned: {ownedQuantity.toFixed(2)} {asset.symbol}</span>
                    <span className="text-textMuted">Max Buy: {Math.floor(balance / asset.price)}</span>
                 </div>
              </div>
 
              <div className="flex justify-between items-center py-4 border-t border-dashed border-border">
                 <span className="text-sm text-textMuted">Total Cost</span>
-                <span className="text-xl font-bold text-textMain">${total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                <span className="text-xl font-bold text-textMain font-mono">₹{total.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
              </div>
 
              <div className="bg-surfaceElevated p-3 rounded-lg flex items-center justify-between">
@@ -109,7 +113,7 @@ export const TradeModal: React.FC<TradeModalProps> = ({
                    <Wallet className="w-4 h-4" />
                    <span className="text-xs">Wallet Balance</span>
                 </div>
-                <span className="text-sm font-semibold">${balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                <span className="text-sm font-semibold font-mono">₹{balance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
              </div>
           </div>
 
@@ -120,6 +124,33 @@ export const TradeModal: React.FC<TradeModalProps> = ({
           >
             {type === 'buy' ? 'Confirm Purchase' : 'Confirm Sale'}
           </Button>
+
+          {/* Transaction History for this stock */}
+          {recentTx.length > 0 && (
+            <div className="border-t border-border pt-4">
+              <div className="flex items-center gap-2 mb-3">
+                <History className="w-4 h-4 text-textMuted" />
+                <span className="text-xs font-semibold text-textMuted uppercase">Recent Trades</span>
+              </div>
+              <div className="space-y-2">
+                {recentTx.map(tx => (
+                  <div key={tx.id} className="flex items-center justify-between text-xs bg-surfaceElevated p-2 rounded-lg">
+                    <div className="flex items-center gap-2">
+                      <span className={`px-1.5 py-0.5 rounded font-bold ${tx.type === 'BUY' ? 'bg-primary/20 text-primary' : 'bg-negative/20 text-negative'}`}>
+                        {tx.type}
+                      </span>
+                      <span className="font-mono text-textMain">{tx.quantity.toFixed(2)} @ ₹{tx.price.toFixed(2)}</span>
+                    </div>
+                    {tx.profitLoss !== undefined && (
+                      <span className={`font-mono font-bold ${tx.profitLoss >= 0 ? 'text-primary' : 'text-negative'}`}>
+                        {tx.profitLoss >= 0 ? '+' : ''}₹{tx.profitLoss.toFixed(0)}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

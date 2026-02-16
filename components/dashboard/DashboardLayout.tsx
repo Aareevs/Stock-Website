@@ -1,206 +1,314 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Sidebar } from './Sidebar';
 import { Card } from '../ui/Card';
-import { MainChart, MiniChart, SentimentChart } from './Charts';
-import { 
-  MAIN_CHART_DATA, METRICS, CREATORS, MARKET_ITEMS, SENTIMENT_DATA, 
-  NEWS_ITEMS, COMMUNITY_POSTS, generateChartData 
-} from '../../constants';
-import { ArrowUpRight, ArrowDownRight, MoreHorizontal, Activity, BarChart2, MessageSquare, Heart, Share2, ThumbsUp, MessageCircle, RefreshCw } from 'lucide-react';
+import { MainChart, MiniSparkline, SentimentChart } from './Charts';
+import { METRICS, SENTIMENT_DATA, generateChartData } from '../../constants';
+import { ArrowUpRight, ArrowDownRight, Trophy, LogIn, LogOut as LogOutIcon, User as UserIcon, History, TrendingUp, TrendingDown } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { TradeModal } from './TradeModal';
-import { MarketItem, PortfolioItem } from '../../types';
+import { MarketItem, PortfolioItem, User, Transaction } from '../../types';
+import { StockDetailChart } from './StockDetailChart';
 
 interface DashboardLayoutProps {
+  currentUser: User | null;
+  users: User[];
+  marketItems: MarketItem[];
+  onUpdateUser: (user: User) => void;
+  onLoginUser: (userId: string) => void;
   onLogout: () => void;
+  onOpenAdmin: () => void;
 }
 
-import { MarketConfigModal } from './MarketConfigModal';
-
-export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onLogout }) => {
+export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
+  currentUser,
+  users,
+  marketItems,
+  onUpdateUser,
+  onLoginUser,
+  onLogout,
+  onOpenAdmin,
+}) => {
   const [activeTab, setActiveTab] = useState('Overview');
-  const [balance, setBalance] = useState(100000); // $100k Virtual Balance
-  const [portfolio, setPortfolio] = useState<PortfolioItem[]>([]);
-  const [marketItems, setMarketItems] = useState<MarketItem[]>(MARKET_ITEMS);
   const [tradeModalOpen, setTradeModalOpen] = useState(false);
-  const [isMarketConfigOpen, setIsMarketConfigOpen] = useState(false);
   const [selectedAsset, setSelectedAsset] = useState<MarketItem | null>(null);
+  const [selectedStock, setSelectedStock] = useState<MarketItem | null>(null);
+  const [loginDropdown, setLoginDropdown] = useState(false);
+  const [loginSearch, setLoginSearch] = useState('');
 
-  const handleUpdateMarket = (newItems: MarketItem[]) => {
-      setMarketItems(newItems);
-  };
-
-  // Simulate Live Market Data
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setMarketItems(prevItems => 
-        prevItems.map(item => {
-          const volatility = 0.005; // 0.5% max change per tick
-          const changePercent = (Math.random() - 0.5) * 2 * volatility;
-          const newPrice = item.price * (1 + changePercent);
-          return {
-            ...item,
-            price: newPrice,
-            change: item.change + (changePercent * 100) // Accumulate change roughly
-          };
-        })
-      );
-    }, 3000);
-
-    return () => clearInterval(interval);
-  }, []);
+  const balance = currentUser?.cashBalance ?? 0;
+  const portfolio = currentUser?.portfolio ?? [];
+  const transactions = currentUser?.transactions ?? [];
 
   const handleOpenTrade = (asset: MarketItem) => {
+    if (!currentUser) {
+      setLoginDropdown(true);
+      return;
+    }
     setSelectedAsset(asset);
     setTradeModalOpen(true);
   };
 
   const handleConfirmTrade = (type: 'buy' | 'sell', quantity: number) => {
-    if (!selectedAsset) return;
+    if (!selectedAsset || !currentUser) return;
 
     const totalCost = quantity * selectedAsset.price;
+    let updatedUser = { ...currentUser };
 
     if (type === 'buy') {
-      if (balance >= totalCost) {
-        setBalance(prev => prev - totalCost);
-        setPortfolio(prev => {
-          const existing = prev.find(p => p.symbol === selectedAsset.symbol);
-          if (existing) {
-            return prev.map(p => p.symbol === selectedAsset.symbol ? { ...p, amount: p.amount + quantity } : p);
-          }
-          return [...prev, { asset: selectedAsset.name, symbol: selectedAsset.symbol, amount: quantity, avgPrice: selectedAsset.price }];
-        });
+      if (updatedUser.cashBalance >= totalCost) {
+        updatedUser.cashBalance -= totalCost;
+        const existing = updatedUser.portfolio.find(p => p.symbol === selectedAsset.symbol);
+        if (existing) {
+          const newTotal = existing.amount + quantity;
+          const newAvg = ((existing.avgPrice * existing.amount) + totalCost) / newTotal;
+          updatedUser.portfolio = updatedUser.portfolio.map(p =>
+            p.symbol === selectedAsset.symbol
+              ? { ...p, amount: newTotal, avgPrice: newAvg }
+              : p
+          );
+        } else {
+          updatedUser.portfolio = [
+            ...updatedUser.portfolio,
+            { asset: selectedAsset.name, symbol: selectedAsset.symbol, amount: quantity, avgPrice: selectedAsset.price },
+          ];
+        }
+
+        const tx: Transaction = {
+          id: `tx-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          symbol: selectedAsset.symbol,
+          assetName: selectedAsset.name,
+          type: 'BUY',
+          quantity,
+          price: selectedAsset.price,
+          timestamp: Date.now(),
+        };
+        updatedUser.transactions = [tx, ...updatedUser.transactions];
       }
     } else {
-      const existing = portfolio.find(p => p.symbol === selectedAsset.symbol);
+      const existing = updatedUser.portfolio.find(p => p.symbol === selectedAsset.symbol);
       if (existing && existing.amount >= quantity) {
-        setBalance(prev => prev + totalCost);
-        setPortfolio(prev => {
-          const newAmount = existing.amount - quantity;
-          if (newAmount <= 0) {
-            return prev.filter(p => p.symbol !== selectedAsset.symbol);
-          }
-          return prev.map(p => p.symbol === selectedAsset.symbol ? { ...p, amount: newAmount } : p);
-        });
+        updatedUser.cashBalance += totalCost;
+        const profitLoss = (selectedAsset.price - existing.avgPrice) * quantity;
+
+        const newAmount = existing.amount - quantity;
+        if (newAmount <= 0) {
+          updatedUser.portfolio = updatedUser.portfolio.filter(p => p.symbol !== selectedAsset.symbol);
+        } else {
+          updatedUser.portfolio = updatedUser.portfolio.map(p =>
+            p.symbol === selectedAsset.symbol ? { ...p, amount: newAmount } : p
+          );
+        }
+
+        const tx: Transaction = {
+          id: `tx-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          symbol: selectedAsset.symbol,
+          assetName: selectedAsset.name,
+          type: 'SELL',
+          quantity,
+          price: selectedAsset.price,
+          purchasePrice: existing.avgPrice,
+          timestamp: Date.now(),
+          profitLoss,
+        };
+        updatedUser.transactions = [tx, ...updatedUser.transactions];
       }
     }
+
+    onUpdateUser(updatedUser);
     setTradeModalOpen(false);
   };
 
-  // Renderers for different views
-  const renderOverview = () => (
-    <>
-      {/* Price Header */}
-      <div className="flex items-end gap-4 mb-6">
-        <span className="text-4xl md:text-5xl font-bold text-textMain">${balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-        <span className="flex items-center gap-1 text-primary bg-primary/10 px-2 py-1 rounded text-sm font-semibold mb-2">
-          Virtual Balance
-        </span>
+  // Calculate leaderboard
+  const leaderboard = users.map(user => {
+    const stockValue = user.portfolio.reduce((acc, item) => {
+      const currentPrice = marketItems.find(m => m.symbol === item.symbol)?.price || 0;
+      return acc + (item.amount * currentPrice);
+    }, 0);
+    return {
+      ...user,
+      stockValue,
+      totalNetWorth: user.cashBalance + stockValue,
+    };
+  }).sort((a, b) => b.totalNetWorth - a.totalNetWorth);
+
+  // If viewing a stock detail chart
+  if (selectedStock) {
+    return (
+      <div className="flex min-h-screen bg-background text-textMain">
+        <Sidebar activeTab={activeTab} setActiveTab={(tab) => { setSelectedStock(null); setActiveTab(tab); }} onOpenAdmin={onOpenAdmin} currentUserName={currentUser?.displayName} />
+        <main className="flex-1 p-4 md:p-8 overflow-y-auto max-h-screen">
+          <StockDetailChart
+            stock={selectedStock}
+            onBack={() => setSelectedStock(null)}
+            ownedQty={portfolio.find(p => p.symbol === selectedStock.symbol)?.amount || 0}
+            avgPrice={portfolio.find(p => p.symbol === selectedStock.symbol)?.avgPrice || 0}
+            onTrade={() => handleOpenTrade(selectedStock)}
+          />
+        </main>
       </div>
+    );
+  }
 
-      {/* Main Chart */}
-      <Card className="h-[400px] mb-6" padding="sm">
-        <MainChart data={MAIN_CHART_DATA} />
-      </Card>
-
-      {/* Metrics Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        {METRICS.map((metric) => (
-          <Card key={metric.id} className="relative group" hoverEffect>
-            <div className="flex justify-between items-start mb-2">
-              <span className="text-sm text-textMuted font-medium">{metric.label}</span>
-              <input type="checkbox" className="accent-primary rounded border-border bg-surfaceElevated w-4 h-4" />
-            </div>
-            <div className="mb-4">
-              <div className="text-xl font-bold text-textMain">{metric.value}</div>
-              <div className={`text-xs flex items-center gap-1 ${metric.change >= 0 ? 'text-primary' : 'text-negative'}`}>
-                {metric.change >= 0 ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
-                {Math.abs(metric.change)}
-              </div>
-            </div>
-            <MiniChart data={metric.history} color={metric.change >= 0 ? '#1ED3A6' : '#EF4444'} />
-          </Card>
-        ))}
-      </div>
-
-      {/* Market Performance Snapshot */}
-      <Card>
-        <div className="flex justify-between items-center mb-6">
-          <h3 className="text-lg font-semibold">Market Performance</h3>
-          <Button variant="ghost" size="sm" onClick={() => setActiveTab('Markets')}>View All</Button>
+  const renderLoginSelector = () => (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={() => setLoginDropdown(false)}>
+      <Card className="w-full max-w-md max-h-[80vh] flex flex-col p-6" padding="none" onClick={(e: React.MouseEvent) => e.stopPropagation()}>
+        <h2 className="text-xl font-bold text-textMain mb-4">Select Your Account</h2>
+        <input
+          type="text"
+          placeholder="Search by name..."
+          value={loginSearch}
+          onChange={(e) => setLoginSearch(e.target.value)}
+          className="w-full bg-surface border border-border rounded-lg px-4 py-2 mb-4 text-sm text-textMain placeholder:text-textMuted focus:outline-none focus:border-primary/50"
+        />
+        <div className="flex-1 overflow-y-auto space-y-1 min-h-0">
+          {users
+            .filter(u => u.displayName.toLowerCase().includes(loginSearch.toLowerCase()) || u.username.toLowerCase().includes(loginSearch.toLowerCase()))
+            .map(user => (
+              <button
+                key={user.id}
+                onClick={() => { onLoginUser(user.id); setLoginDropdown(false); }}
+                className={`w-full text-left px-4 py-3 rounded-lg transition-colors flex items-center justify-between ${
+                  currentUser?.id === user.id ? 'bg-primary/20 border border-primary/50' : 'hover:bg-surfaceElevated'
+                }`}
+              >
+                <div>
+                  <div className="font-semibold text-textMain text-sm">{user.displayName}</div>
+                  <div className="text-xs text-textMuted">@{user.username}</div>
+                </div>
+                <span className="text-xs text-textMuted font-mono">₹{user.cashBalance.toLocaleString('en-IN')}</span>
+              </button>
+            ))}
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="text-textMuted text-xs uppercase tracking-wider border-b border-border">
-                <th className="pb-3 pl-2">Company</th>
-                <th className="pb-3">Price</th>
-                <th className="pb-3">Change (24h)</th>
-                <th className="pb-3 text-right pr-2">Trend</th>
-              </tr>
-            </thead>
-            <tbody className="text-sm">
-              {marketItems.slice(0, 5).map((item) => (
-                <tr key={item.symbol} className="border-b border-border/50 hover:bg-surfaceElevated/50 transition-colors">
-                  <td className="py-4 pl-2">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-surfaceElevated border border-border flex items-center justify-center font-bold text-primary">
-                        {item.icon}
-                      </div>
-                      <div>
-                        <div className="font-semibold text-textMain">{item.name}</div>
-                        <div className="text-xs text-textMuted">{item.symbol}</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="py-4 font-medium">${item.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                  <td className="py-4">
-                    <span className={`flex items-center gap-1 ${item.change >= 0 ? 'text-primary' : 'text-negative'}`}>
-                      {item.change >= 0 ? '+' : ''}{item.change.toFixed(2)}%
-                    </span>
-                  </td>
-                  <td className="py-4 pr-2 w-32">
-                    <MiniChart data={generateChartData(10, 100, 10)} color={item.change >= 0 ? '#1ED3A6' : '#EF4444'} />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="mt-4 pt-4 border-t border-border">
+          <Button variant="ghost" onClick={() => setLoginDropdown(false)} className="w-full">Cancel</Button>
         </div>
       </Card>
-    </>
+    </div>
   );
+
+  const renderOverview = () => {
+    const totalPortfolioValue = portfolio.reduce((acc, item) => {
+      const currentPrice = marketItems.find(m => m.symbol === item.symbol)?.price || 0;
+      return acc + (item.amount * currentPrice);
+    }, 0);
+    const totalNetWorth = balance + totalPortfolioValue;
+    const myRank = leaderboard.findIndex(u => u.id === currentUser?.id) + 1;
+
+    return (
+      <>
+        {/* Balance Header */}
+        <div className="flex items-end gap-4 mb-6">
+          <div>
+            <span className="text-sm text-textMuted block mb-1">Total Net Worth</span>
+            <span className="text-4xl md:text-5xl font-bold text-textMain">
+              ₹{currentUser ? totalNetWorth.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}
+            </span>
+          </div>
+          {currentUser && (
+            <div className="flex gap-2 mb-2">
+              <span className="flex items-center gap-1 text-primary bg-primary/10 px-2 py-1 rounded text-sm font-semibold">
+                <Trophy className="w-3 h-3" /> Rank #{myRank}
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* Summary Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <Card className="bg-gradient-to-br from-surface to-surfaceElevated">
+            <h3 className="text-sm text-textMuted mb-1">Cash Balance</h3>
+            <div className="text-2xl font-bold font-mono">₹{balance.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</div>
+          </Card>
+          <Card className="bg-gradient-to-br from-surface to-surfaceElevated">
+            <h3 className="text-sm text-textMuted mb-1">Stock Value</h3>
+            <div className="text-2xl font-bold font-mono">₹{totalPortfolioValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</div>
+          </Card>
+          <Card className="bg-gradient-to-br from-surface to-surfaceElevated">
+            <h3 className="text-sm text-textMuted mb-1">P&L</h3>
+            <div className={`text-2xl font-bold font-mono ${totalNetWorth - (currentUser?.startingCapital ?? 0) >= 0 ? 'text-primary' : 'text-negative'}`}>
+              {totalNetWorth - (currentUser?.startingCapital ?? 0) >= 0 ? '+' : ''}₹{(totalNetWorth - (currentUser?.startingCapital ?? 0)).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+            </div>
+          </Card>
+        </div>
+
+        {/* Market Performance Snapshot */}
+        <Card>
+          <div className="flex justify-between items-center mb-6">
+            <h3 className="text-lg font-semibold">Market Snapshot</h3>
+            <Button variant="ghost" size="sm" onClick={() => setActiveTab('Markets')}>View All</Button>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="text-textMuted text-xs uppercase tracking-wider border-b border-border">
+                  <th className="pb-3 pl-2">Company</th>
+                  <th className="pb-3">Price</th>
+                  <th className="pb-3">Change</th>
+                  <th className="pb-3 text-right pr-2">Trend</th>
+                </tr>
+              </thead>
+              <tbody className="text-sm">
+                {marketItems.slice(0, 5).map((item) => (
+                  <tr
+                    key={item.symbol}
+                    className="border-b border-border/50 hover:bg-surfaceElevated/50 transition-colors cursor-pointer"
+                    onClick={() => setSelectedStock(item)}
+                  >
+                    <td className="py-4 pl-2">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-surfaceElevated border border-border flex items-center justify-center font-bold text-primary">
+                          {item.icon}
+                        </div>
+                        <div>
+                          <div className="font-semibold text-textMain">{item.name}</div>
+                          <div className="text-xs text-textMuted">{item.symbol}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="py-4 font-mono font-medium">₹{item.price.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                    <td className="py-4">
+                      <span className={`flex items-center gap-1 ${item.change >= 0 ? 'text-primary' : 'text-negative'}`}>
+                        {item.change >= 0 ? '+' : ''}{item.change.toFixed(2)}%
+                      </span>
+                    </td>
+                    <td className="py-4 pr-2 w-32">
+                      <MiniSparkline data={item.priceHistory.slice(-20)} color={item.change >= 0 ? '#1ED3A6' : '#EF4444'} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      </>
+    );
+  };
 
   const renderMarkets = () => (
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <Card className="bg-gradient-to-br from-surface to-surfaceElevated">
-              <h3 className="text-sm text-textMuted mb-2">Market Status</h3>
-              <div className="text-2xl font-bold mb-1 flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-primary animate-pulse"/> Live
-              </div>
-              <div className="text-primary text-sm flex items-center gap-1">Prices update every 3s</div>
-          </Card>
-          <Card className="bg-gradient-to-br from-surface to-surfaceElevated">
-              <h3 className="text-sm text-textMuted mb-2">Your Purchasing Power</h3>
-              <div className="text-2xl font-bold mb-1">${balance.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
-              <div className="text-textMuted text-sm flex items-center gap-1">Available to trade</div>
-          </Card>
-          <Card className="bg-gradient-to-br from-surface to-surfaceElevated">
-              <h3 className="text-sm text-textMuted mb-2">Tech Sector</h3>
-              <div className="text-2xl font-bold mb-1">+1.24%</div>
-              <div className="text-primary text-sm flex items-center gap-1"><ArrowUpRight className="w-3 h-3"/> Bullish</div>
-          </Card>
+        <Card className="bg-gradient-to-br from-surface to-surfaceElevated">
+          <h3 className="text-sm text-textMuted mb-2">Market Status</h3>
+          <div className="text-2xl font-bold mb-1 flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-primary animate-pulse" /> Live
+          </div>
+          <div className="text-primary text-sm flex items-center gap-1">Prices update every 5s</div>
+        </Card>
+        <Card className="bg-gradient-to-br from-surface to-surfaceElevated">
+          <h3 className="text-sm text-textMuted mb-2">Your Purchasing Power</h3>
+          <div className="text-2xl font-bold mb-1 font-mono">₹{balance.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</div>
+          <div className="text-textMuted text-sm flex items-center gap-1">Available to trade</div>
+        </Card>
+        <Card className="bg-gradient-to-br from-surface to-surfaceElevated">
+          <h3 className="text-sm text-textMuted mb-2">Total Stocks</h3>
+          <div className="text-2xl font-bold mb-1">{marketItems.length}</div>
+          <div className="text-primary text-sm flex items-center gap-1"><ArrowUpRight className="w-3 h-3" /> Active</div>
+        </Card>
       </div>
 
       <Card>
         <div className="flex justify-between items-center mb-6">
           <h3 className="text-lg font-semibold">Live Market Data</h3>
-          <div className="flex gap-2">
-             <Button variant="secondary" size="sm" onClick={() => setIsMarketConfigOpen(true)}>Manage Market</Button>
-             <Button variant="ghost" size="sm">Favorites</Button>
-             <Button variant="secondary" size="sm">Tech Stocks</Button>
-          </div>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
@@ -208,39 +316,46 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onLogout }) =>
               <tr className="text-textMuted text-xs uppercase tracking-wider border-b border-border">
                 <th className="pb-3 pl-2">Company</th>
                 <th className="pb-3">Price</th>
-                <th className="pb-3">Change (24h)</th>
+                <th className="pb-3">Change</th>
+                <th className="pb-3">Your Avg Price</th>
                 <th className="pb-3">Trend</th>
                 <th className="pb-3">Action</th>
               </tr>
             </thead>
             <tbody className="text-sm">
-              {marketItems.map((item) => (
-                <tr key={item.symbol} className="border-b border-border/50 hover:bg-surfaceElevated/50 transition-colors group">
-                  <td className="py-4 pl-2">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-surfaceElevated border border-border flex items-center justify-center font-bold text-primary transition-transform group-hover:scale-110">
-                        {item.icon}
+              {marketItems.map((item) => {
+                const owned = portfolio.find(p => p.symbol === item.symbol);
+                return (
+                  <tr key={item.symbol} className="border-b border-border/50 hover:bg-surfaceElevated/50 transition-colors group">
+                    <td className="py-4 pl-2">
+                      <div className="flex items-center gap-3 cursor-pointer" onClick={() => setSelectedStock(item)}>
+                        <div className="w-10 h-10 rounded-full bg-surfaceElevated border border-border flex items-center justify-center font-bold text-primary transition-transform group-hover:scale-110">
+                          {item.icon}
+                        </div>
+                        <div>
+                          <div className="font-semibold text-textMain">{item.name}</div>
+                          <div className="text-xs text-textMuted">{item.symbol}</div>
+                        </div>
                       </div>
-                      <div>
-                        <div className="font-semibold text-textMain">{item.name}</div>
-                        <div className="text-xs text-textMuted">{item.symbol}</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="py-4 font-mono font-medium">${item.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                  <td className="py-4">
-                    <span className={`flex items-center gap-1 ${item.change >= 0 ? 'text-primary' : 'text-negative'}`}>
-                      {item.change >= 0 ? '+' : ''}{item.change.toFixed(2)}%
-                    </span>
-                  </td>
-                  <td className="py-4 pr-2 w-32">
-                    <MiniChart data={generateChartData(15, 100, 15)} color={item.change >= 0 ? '#1ED3A6' : '#EF4444'} />
-                  </td>
-                  <td className="py-4">
-                    <Button size="sm" onClick={() => handleOpenTrade(item)} className="opacity-0 group-hover:opacity-100 transition-opacity">Trade</Button>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                    <td className="py-4 font-mono font-medium">₹{item.price.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                    <td className="py-4">
+                      <span className={`flex items-center gap-1 ${item.change >= 0 ? 'text-primary' : 'text-negative'}`}>
+                        {item.change >= 0 ? '+' : ''}{item.change.toFixed(2)}%
+                      </span>
+                    </td>
+                    <td className="py-4 font-mono text-textMuted">
+                      {owned ? `₹${owned.avgPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
+                    </td>
+                    <td className="py-4 w-32">
+                      <MiniSparkline data={item.priceHistory.slice(-20)} color={item.change >= 0 ? '#1ED3A6' : '#EF4444'} />
+                    </td>
+                    <td className="py-4">
+                      <Button size="sm" onClick={() => handleOpenTrade(item)} className="opacity-0 group-hover:opacity-100 transition-opacity">Trade</Button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -249,334 +364,360 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onLogout }) =>
   );
 
   const renderPortfolio = () => {
-    // Calculate Portfolio Value dynamically based on current market prices
     const totalPortfolioValue = portfolio.reduce((acc, item) => {
-        const currentPrice = marketItems.find(m => m.symbol === item.symbol)?.price || 0;
-        return acc + (item.amount * currentPrice);
+      const currentPrice = marketItems.find(m => m.symbol === item.symbol)?.price || 0;
+      return acc + (item.amount * currentPrice);
     }, 0);
     const totalNetWorth = balance + totalPortfolioValue;
 
+    if (!currentUser) {
+      return (
+        <Card className="text-center py-20">
+          <UserIcon className="w-12 h-12 mx-auto text-textMuted mb-4" />
+          <h3 className="text-xl font-bold mb-2">Select Your Account</h3>
+          <p className="text-textMuted mb-4">Choose your player account to view your portfolio</p>
+          <Button onClick={() => setLoginDropdown(true)}>
+            <LogIn className="w-4 h-4 mr-2" /> Select Account
+          </Button>
+        </Card>
+      );
+    }
+
     return (
-    <div className="space-y-6">
-       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-           <Card className="md:col-span-2 relative overflow-hidden bg-gradient-to-br from-surface to-surfaceElevated">
-               <div className="relative z-10">
-                   <h3 className="text-sm text-textMuted mb-2">Total Net Worth</h3>
-                   <div className="text-4xl font-bold mb-4">${totalNetWorth.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-                   <div className="flex gap-4">
-                       <div className="px-3 py-1 bg-surface/50 rounded border border-border">
-                          <span className="text-xs text-textMuted block">Cash Balance</span>
-                          <span className="font-mono">${balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                       </div>
-                       <div className="px-3 py-1 bg-surface/50 rounded border border-border">
-                          <span className="text-xs text-textMuted block">Stock Value</span>
-                          <span className="font-mono">${totalPortfolioValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                       </div>
-                   </div>
-               </div>
-           </Card>
-           <Card>
-               <h3 className="text-sm font-semibold mb-2">Allocation</h3>
-               <div className="h-32">
-                  {portfolio.length > 0 ? (
-                   <SentimentChart data={portfolio.map((i, idx) => ({ name: i.symbol, value: i.amount * (marketItems.find(m => m.symbol === i.symbol)?.price || 0), color: ['#1ED3A6', '#14B8A6', '#0D9488', '#0F766E', '#10B981', '#34D399'][idx % 6] }))} />
-                  ) : (
-                    <div className="h-full flex items-center justify-center text-textMuted text-xs">No assets owned</div>
-                  )}
-               </div>
-           </Card>
-       </div>
-
-       <Card>
-           <h3 className="text-lg font-semibold mb-6">Your Holdings</h3>
-           {portfolio.length === 0 ? (
-             <div className="text-center py-12 text-textMuted">
-                <p className="mb-4">You don't own any stocks yet.</p>
-                <Button onClick={() => setActiveTab('Markets')}>Go to Markets</Button>
-             </div>
-           ) : (
-           <div className="overflow-x-auto">
-             <table className="w-full text-left">
-               <thead>
-                 <tr className="text-textMuted text-xs uppercase border-b border-border">
-                   <th className="pb-3 pl-2">Asset</th>
-                   <th className="pb-3">Quantity</th>
-                   <th className="pb-3">Current Price</th>
-                   <th className="pb-3">Total Value</th>
-                   <th className="pb-3 text-right pr-2">Actions</th>
-                 </tr>
-               </thead>
-               <tbody className="text-sm">
-                 {portfolio.map((item) => {
-                   const marketData = marketItems.find(m => m.symbol === item.symbol);
-                   const currentPrice = marketData?.price || 0;
-                   const totalValue = item.amount * currentPrice;
-                   
-                   return (
-                   <tr key={item.symbol} className="border-b border-border/50">
-                     <td className="py-4 pl-2">
-                       <div className="flex items-center gap-3">
-                         <div className="w-8 h-8 rounded-full bg-surfaceElevated border border-border flex items-center justify-center font-bold text-textMain">
-                           {item.symbol[0]}
-                         </div>
-                         <div>
-                           <div className="font-semibold text-textMain">{item.asset}</div>
-                           <div className="text-xs text-textMuted">{item.symbol}</div>
-                         </div>
-                       </div>
-                     </td>
-                     <td className="py-4 font-mono">{item.amount.toFixed(4)}</td>
-                     <td className="py-4 text-textMuted">${currentPrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                     <td className="py-4 font-bold text-textMain">${totalValue.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                     <td className="py-4 text-right pr-2">
-                       <Button size="sm" variant="secondary" onClick={() => handleOpenTrade(marketData!)}>Trade</Button>
-                     </td>
-                   </tr>
-                 )})}
-               </tbody>
-             </table>
-           </div>
-           )}
-       </Card>
-    </div>
-  )};
-
-  const renderNews = () => (
-    <div className="space-y-6">
-        <h2 className="text-2xl font-bold">Latest Market Insights</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {NEWS_ITEMS.map((news) => (
-                <Card key={news.id} className="flex flex-col h-full group cursor-pointer overflow-hidden" padding="none">
-                    <div className="h-48 overflow-hidden relative">
-                        <img src={news.image} alt={news.title} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
-                        <div className="absolute top-4 right-4 bg-surface/80 backdrop-blur px-2 py-1 rounded text-xs font-semibold">
-                            {news.sentiment}
-                        </div>
-                    </div>
-                    <div className="p-6 flex flex-col flex-1">
-                        <div className="flex items-center gap-2 text-xs text-textMuted mb-3">
-                            <span>{news.source}</span>
-                            <span>•</span>
-                            <span>{news.time}</span>
-                        </div>
-                        <h3 className="text-xl font-bold mb-3 group-hover:text-primary transition-colors">{news.title}</h3>
-                        <div className="mt-auto pt-4 flex items-center justify-between border-t border-border">
-                             <div className="flex gap-4">
-                                 <button className="text-textMuted hover:text-textMain"><ThumbsUp className="w-4 h-4"/></button>
-                                 <button className="text-textMuted hover:text-textMain"><MessageCircle className="w-4 h-4"/></button>
-                             </div>
-                             <button className="text-textMuted hover:text-primary"><Share2 className="w-4 h-4"/></button>
-                        </div>
-                    </div>
-                </Card>
-            ))}
-        </div>
-    </div>
-  );
-
-  const renderCommunity = () => (
-    <div className="max-w-3xl mx-auto space-y-6">
-        <Card>
-            <div className="flex gap-4">
-                <img src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100&auto=format&fit=crop&q=60" className="w-10 h-10 rounded-full object-cover" alt="You" />
-                <div className="flex-1">
-                    <input type="text" placeholder="Share your market analysis..." className="w-full bg-surfaceElevated border border-border rounded-lg px-4 py-3 mb-3 focus:outline-none focus:border-primary/50 text-textMain placeholder:text-textMuted" />
-                    <div className="flex justify-between items-center">
-                        <div className="flex gap-2 text-primary">
-                           <Button variant="ghost" size="sm" className="p-2"><Activity className="w-4 h-4"/></Button>
-                           <Button variant="ghost" size="sm" className="p-2"><BarChart2 className="w-4 h-4"/></Button>
-                        </div>
-                        <Button size="sm">Post</Button>
-                    </div>
+      <div className="space-y-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <Card className="md:col-span-2 relative overflow-hidden bg-gradient-to-br from-surface to-surfaceElevated">
+            <div className="relative z-10">
+              <h3 className="text-sm text-textMuted mb-2">Total Net Worth</h3>
+              <div className="text-4xl font-bold mb-4 font-mono">₹{totalNetWorth.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+              <div className="flex gap-4">
+                <div className="px-3 py-1 bg-surface/50 rounded border border-border">
+                  <span className="text-xs text-textMuted block">Cash Balance</span>
+                  <span className="font-mono">₹{balance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                 </div>
+                <div className="px-3 py-1 bg-surface/50 rounded border border-border">
+                  <span className="text-xs text-textMuted block">Stock Value</span>
+                  <span className="font-mono">₹{totalPortfolioValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                </div>
+              </div>
             </div>
+          </Card>
+          <Card>
+            <h3 className="text-sm font-semibold mb-2">Allocation</h3>
+            <div className="h-32">
+              {portfolio.length > 0 ? (
+                <SentimentChart data={portfolio.map((i, idx) => ({ name: i.symbol, value: i.amount * (marketItems.find(m => m.symbol === i.symbol)?.price || 0), color: ['#1ED3A6', '#14B8A6', '#0D9488', '#0F766E', '#10B981', '#34D399'][idx % 6] }))} />
+              ) : (
+                <div className="h-full flex items-center justify-center text-textMuted text-xs">No assets owned</div>
+              )}
+            </div>
+          </Card>
+        </div>
+
+        <Card>
+          <h3 className="text-lg font-semibold mb-6">Your Holdings</h3>
+          {portfolio.length === 0 ? (
+            <div className="text-center py-12 text-textMuted">
+              <p className="mb-4">You don't own any stocks yet.</p>
+              <Button onClick={() => setActiveTab('Markets')}>Go to Markets</Button>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="text-textMuted text-xs uppercase border-b border-border">
+                    <th className="pb-3 pl-2">Asset</th>
+                    <th className="pb-3">Qty</th>
+                    <th className="pb-3">Avg Buy Price</th>
+                    <th className="pb-3">Current Price</th>
+                    <th className="pb-3">P&L</th>
+                    <th className="pb-3">Total Value</th>
+                    <th className="pb-3 text-right pr-2">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="text-sm">
+                  {portfolio.map((item) => {
+                    const marketData = marketItems.find(m => m.symbol === item.symbol);
+                    const currentPrice = marketData?.price || 0;
+                    const totalValue = item.amount * currentPrice;
+                    const pnl = (currentPrice - item.avgPrice) * item.amount;
+                    return (
+                      <tr key={item.symbol} className="border-b border-border/50">
+                        <td className="py-4 pl-2">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-full bg-surfaceElevated border border-border flex items-center justify-center font-bold text-textMain">
+                              {item.symbol[0]}
+                            </div>
+                            <div>
+                              <div className="font-semibold text-textMain">{item.asset}</div>
+                              <div className="text-xs text-textMuted">{item.symbol}</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="py-4 font-mono">{item.amount.toFixed(2)}</td>
+                        <td className="py-4 font-mono text-textMuted">₹{item.avgPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                        <td className="py-4 font-mono">₹{currentPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                        <td className={`py-4 font-mono font-bold ${pnl >= 0 ? 'text-primary' : 'text-negative'}`}>
+                          {pnl >= 0 ? '+' : ''}₹{pnl.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        </td>
+                        <td className="py-4 font-bold font-mono text-textMain">₹{totalValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                        <td className="py-4 text-right pr-2">
+                          <Button size="sm" variant="secondary" onClick={() => handleOpenTrade(marketData!)}>Trade</Button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </Card>
 
-        <div className="space-y-4">
-            {COMMUNITY_POSTS.map((post) => (
-                <Card key={post.id} className="hover:bg-surfaceElevated/30 transition-colors cursor-pointer">
-                    <div className="flex gap-4">
-                        <img src={post.avatar} alt={post.user} className="w-10 h-10 rounded-full border border-border object-cover" />
-                        <div className="flex-1">
-                            <div className="flex justify-between items-start mb-1">
-                                <div>
-                                    <span className="font-bold text-textMain mr-2">{post.user}</span>
-                                    <span className="text-textMuted text-sm">{post.handle}</span>
-                                </div>
-                                <span className="text-textMuted text-xs">{post.time}</span>
-                            </div>
-                            <p className="text-textMain text-sm leading-relaxed mb-3">{post.content}</p>
-                            <div className="flex gap-6 text-textMuted text-xs">
-                                <button className="flex items-center gap-1.5 hover:text-primary"><Heart className="w-4 h-4"/> {post.likes}</button>
-                                <button className="flex items-center gap-1.5 hover:text-primary"><MessageSquare className="w-4 h-4"/> {post.comments}</button>
-                                <button className="flex items-center gap-1.5 hover:text-primary"><Share2 className="w-4 h-4"/> Share</button>
-                            </div>
-                        </div>
-                    </div>
-                </Card>
-            ))}
+        {/* Transaction History */}
+        {transactions.length > 0 && (
+          <Card>
+            <div className="flex items-center gap-2 mb-6">
+              <History className="w-5 h-5 text-primary" />
+              <h3 className="text-lg font-semibold">Transaction History</h3>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="text-textMuted text-xs uppercase border-b border-border">
+                    <th className="pb-3 pl-2">Type</th>
+                    <th className="pb-3">Stock</th>
+                    <th className="pb-3">Qty</th>
+                    <th className="pb-3">Price</th>
+                    <th className="pb-3">Buy Price</th>
+                    <th className="pb-3">P&L</th>
+                    <th className="pb-3 text-right pr-2">Time</th>
+                  </tr>
+                </thead>
+                <tbody className="text-sm">
+                  {transactions.slice(0, 20).map((tx) => (
+                    <tr key={tx.id} className="border-b border-border/50">
+                      <td className="py-3 pl-2">
+                        <span className={`px-2 py-1 rounded text-xs font-bold ${tx.type === 'BUY' ? 'bg-primary/20 text-primary' : 'bg-negative/20 text-negative'}`}>
+                          {tx.type}
+                        </span>
+                      </td>
+                      <td className="py-3 font-semibold">{tx.symbol}</td>
+                      <td className="py-3 font-mono">{tx.quantity.toFixed(2)}</td>
+                      <td className="py-3 font-mono">₹{tx.price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                      <td className="py-3 font-mono text-textMuted">
+                        {tx.purchasePrice ? `₹${tx.purchasePrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
+                      </td>
+                      <td className={`py-3 font-mono font-bold ${(tx.profitLoss ?? 0) >= 0 ? 'text-primary' : 'text-negative'}`}>
+                        {tx.profitLoss !== undefined ? `${tx.profitLoss >= 0 ? '+' : ''}₹${tx.profitLoss.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
+                      </td>
+                      <td className="py-3 text-right pr-2 text-textMuted text-xs">
+                        {new Date(tx.timestamp).toLocaleString('en-IN', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' })}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        )}
+      </div>
+    );
+  };
+
+  const renderLeaderboard = () => (
+    <div className="space-y-6">
+      <div className="flex items-center gap-3 mb-2">
+        <Trophy className="w-8 h-8 text-yellow-400" />
+        <div>
+          <h2 className="text-2xl font-bold">Competition Leaderboard</h2>
+          <p className="text-textMuted text-sm">40 Players • Starting Capital: ₹10 Cr Each</p>
         </div>
+      </div>
+
+      <Card>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="text-textMuted text-xs uppercase tracking-wider border-b border-border">
+                <th className="pb-3 pl-2">Rank</th>
+                <th className="pb-3">Player</th>
+                <th className="pb-3">Cash Balance</th>
+                <th className="pb-3">Stock Value</th>
+                <th className="pb-3">Total Net Worth</th>
+                <th className="pb-3 text-right pr-2">P&L</th>
+              </tr>
+            </thead>
+            <tbody className="text-sm">
+              {leaderboard.map((user, index) => {
+                const pnl = user.totalNetWorth - user.startingCapital;
+                const isCurrentUser = user.id === currentUser?.id;
+                return (
+                  <tr
+                    key={user.id}
+                    className={`border-b border-border/50 transition-colors ${
+                      isCurrentUser ? 'bg-primary/10 border-l-2 border-l-primary' : 'hover:bg-surfaceElevated/50'
+                    } ${index < 3 ? 'font-semibold' : ''}`}
+                  >
+                    <td className="py-4 pl-2">
+                      <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full text-sm font-bold ${
+                        index === 0 ? 'bg-yellow-400/20 text-yellow-400' :
+                        index === 1 ? 'bg-gray-300/20 text-gray-300' :
+                        index === 2 ? 'bg-amber-600/20 text-amber-600' :
+                        'text-textMuted'
+                      }`}>
+                        {index + 1}
+                      </span>
+                    </td>
+                    <td className="py-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-surfaceElevated border border-border flex items-center justify-center text-xs font-bold text-primary">
+                          {user.displayName.split(' ').map(n => n[0]).join('')}
+                        </div>
+                        <div>
+                          <div className="text-textMain">{user.displayName}</div>
+                          <div className="text-xs text-textMuted">@{user.username}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="py-4 font-mono">₹{user.cashBalance.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</td>
+                    <td className="py-4 font-mono">₹{user.stockValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</td>
+                    <td className="py-4 font-mono font-bold">₹{user.totalNetWorth.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</td>
+                    <td className={`py-4 text-right pr-2 font-mono font-bold ${pnl >= 0 ? 'text-primary' : 'text-negative'}`}>
+                      {pnl >= 0 ? '+' : ''}₹{pnl.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </Card>
     </div>
   );
 
   return (
     <div className="flex min-h-screen bg-background text-textMain">
-      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} onLogout={onLogout} />
-      
+      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} onOpenAdmin={onOpenAdmin} currentUserName={currentUser?.displayName} />
+
       {tradeModalOpen && (
-        <TradeModal 
+        <TradeModal
           isOpen={tradeModalOpen}
           onClose={() => setTradeModalOpen(false)}
           asset={selectedAsset}
           balance={balance}
           onConfirm={handleConfirmTrade}
           ownedQuantity={portfolio.find(p => p.symbol === selectedAsset?.symbol)?.amount || 0}
+          transactions={transactions.filter(t => t.symbol === selectedAsset?.symbol)}
         />
       )}
 
-      <MarketConfigModal 
-        isOpen={isMarketConfigOpen}
-        onClose={() => setIsMarketConfigOpen(false)}
-        currentItems={marketItems}
-        onSave={handleUpdateMarket}
-      />
+      {loginDropdown && renderLoginSelector()}
 
       <main className="flex-1 p-4 md:p-8 overflow-y-auto max-h-screen">
         <header className="flex justify-between items-center mb-8">
           <div>
             <div className="flex items-center gap-3 mb-1">
-              <div className="w-10 h-10 rounded-full overflow-hidden border border-border">
-                <img src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100&auto=format&fit=crop&q=60" alt="Profile" className="w-full h-full object-cover" />
+              <div className="w-10 h-10 rounded-full bg-surfaceElevated border border-border flex items-center justify-center text-sm font-bold text-primary">
+                {currentUser ? currentUser.displayName.split(' ').map(n => n[0]).join('') : '?'}
               </div>
               <div>
-                <h1 className="text-xl md:text-2xl font-bold text-textMain leading-none">Aareev Srinivasan</h1>
-                <span className="text-xs md:text-sm text-textMuted">Aareev</span>
+                <h1 className="text-xl md:text-2xl font-bold text-textMain leading-none">
+                  {currentUser ? currentUser.displayName : 'VSX: Buy or Bail'}
+                </h1>
+                <span className="text-xs md:text-sm text-textMuted">
+                  {currentUser ? `@${currentUser.username}` : 'Select an account to begin'}
+                </span>
               </div>
             </div>
           </div>
           <div className="flex gap-3">
-             <div className="hidden md:flex bg-surface border border-border rounded-lg p-1">
-                {['1H', '1D', '1W', '1M', '1Y', 'ALL'].map((tf, i) => (
-                    <button key={tf} className={`px-3 py-1 text-xs font-semibold rounded ${i === 3 ? 'bg-primary text-background' : 'text-textMuted hover:text-textMain'}`}>
-                        {tf}
-                    </button>
-                ))}
-             </div>
-             <div className="flex items-center gap-2 bg-surfaceElevated px-3 py-1 rounded-lg border border-border">
-                <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-                <span className="text-xs font-mono">${balance.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
-             </div>
+            {currentUser ? (
+              <>
+                <div className="flex items-center gap-2 bg-surfaceElevated px-3 py-1 rounded-lg border border-border">
+                  <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                  <span className="text-xs font-mono">₹{balance.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
+                </div>
+                <Button variant="ghost" size="sm" onClick={onLogout}>
+                  <LogOutIcon className="w-4 h-4 mr-1" /> Logout
+                </Button>
+              </>
+            ) : (
+              <Button onClick={() => setLoginDropdown(true)}>
+                <LogIn className="w-4 h-4 mr-1" /> Select Account
+              </Button>
+            )}
           </div>
         </header>
 
         {activeTab === 'Overview' && (
-           <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
-             <div className="xl:col-span-3 space-y-6">
-                {renderOverview()}
-             </div>
-             <div className="space-y-6">
-                {/* Right Sidebar Widgets */}
-                
-                {/* Top Creators */}
-                <Card>
-                  <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-sm font-semibold text-textMain">Top Creators</h3>
-                    <ArrowUpRight className="w-4 h-4 text-textMuted cursor-pointer hover:text-primary" />
-                  </div>
-                  <div className="flex gap-2 mb-2">
-                    {CREATORS.map((creator) => (
-                      <div key={creator.id} className="relative group cursor-pointer">
-                        <img 
-                          src={creator.avatar} 
-                          alt={creator.name} 
-                          className={`w-10 h-10 rounded-full border-2 ${
-                            creator.sentiment === 'positive' ? 'border-primary' : 
-                            creator.sentiment === 'negative' ? 'border-negative' : 'border-gray-500'
-                          }`}
-                        />
-                        <div className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-surface border border-surface flex items-center justify-center">
-                           <div className={`w-1.5 h-1.5 rounded-full ${
-                               creator.sentiment === 'positive' ? 'bg-primary' : 
-                               creator.sentiment === 'negative' ? 'bg-negative' : 'bg-gray-500'
-                           }`} />
-                        </div>
-                      </div>
-                    ))}
-                    <div className="w-10 h-10 rounded-full bg-surfaceElevated border border-border flex items-center justify-center text-xs font-bold text-textMuted">
-                      +120
+          <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
+            <div className="xl:col-span-3 space-y-6">
+              {renderOverview()}
+            </div>
+            <div className="space-y-6">
+              {/* Activity Frequency */}
+              <Card>
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-sm font-semibold">Activity Frequency</h3>
+                </div>
+                <div className="grid grid-cols-7 gap-1 h-32 content-end">
+                  {Array.from({ length: 49 }).map((_, i) => {
+                    const opacity = Math.random();
+                    const active = Math.random() > 0.6;
+                    return (
+                      <div
+                        key={i}
+                        className={`rounded-sm transition-all duration-500 hover:scale-110 ${active ? 'bg-primary' : 'bg-surfaceElevated'}`}
+                        style={{
+                          opacity: active ? 0.2 + (opacity * 0.8) : 1,
+                          height: active ? `${20 + (opacity * 60)}%` : '100%',
+                          alignSelf: 'end'
+                        }}
+                      />
+                    );
+                  })}
+                </div>
+              </Card>
+
+              {/* Sentiment Gauge */}
+              <Card>
+                <h3 className="text-sm font-semibold mb-2">Market Sentiment</h3>
+                <SentimentChart data={SENTIMENT_DATA} />
+                <div className="grid grid-cols-3 gap-2 mt-4 text-center">
+                  {SENTIMENT_DATA.map((item) => (
+                    <div key={item.name}>
+                      <div className="text-xs font-bold" style={{ color: item.color }}>{item.value}%</div>
+                      <div className="text-[10px] text-textMuted">{item.name}</div>
                     </div>
-                  </div>
-                </Card>
+                  ))}
+                </div>
+              </Card>
 
-                {/* Activity Frequency */}
-                <Card>
-                   <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-sm font-semibold">Activity Frequency</h3>
-                  </div>
-                  <div className="flex gap-2 mb-4">
-                    <button className="px-3 py-1 bg-surfaceElevated rounded text-xs text-textMain border border-border">Mentions</button>
-                    <button className="px-3 py-1 bg-transparent rounded text-xs text-textMuted hover:text-textMain">Engagements</button>
-                  </div>
-                  <div className="grid grid-cols-7 gap-1 h-32 content-end">
-                      {Array.from({ length: 49 }).map((_, i) => {
-                          const opacity = Math.random();
-                          const active = Math.random() > 0.6;
-                          return (
-                            <div 
-                                key={i} 
-                                className={`rounded-sm transition-all duration-500 hover:scale-110 ${active ? 'bg-primary' : 'bg-surfaceElevated'}`}
-                                style={{ 
-                                    opacity: active ? 0.2 + (opacity * 0.8) : 1,
-                                    height: active ? `${20 + (opacity * 60)}%` : '100%',
-                                    alignSelf: 'end'
-                                }} 
-                            />
-                          )
-                      })}
-                  </div>
-                  <div className="flex justify-between text-xs text-textMuted mt-2 font-mono">
-                      <span>Sun</span><span>Sun</span><span>Sun</span>
-                  </div>
-                </Card>
-
-                {/* Sentiment Gauge */}
-                <Card>
-                  <h3 className="text-sm font-semibold mb-2">Sentiment</h3>
-                  <SentimentChart data={SENTIMENT_DATA} />
-                  <div className="grid grid-cols-3 gap-2 mt-4 text-center">
-                    {SENTIMENT_DATA.map((item) => (
-                        <div key={item.name}>
-                            <div className="text-xs font-bold" style={{ color: item.color }}>{item.value}%</div>
-                            <div className="text-[10px] text-textMuted">{item.name}</div>
-                        </div>
-                    ))}
-                  </div>
-                </Card>
-                
-                {/* Feed Snippets */}
-                 <div className="space-y-2">
-                     {CREATORS.slice(0, 3).map((creator, i) => (
-                         <div key={i} className="flex gap-3 p-3 rounded-xl bg-surface/50 border border-border/50 hover:bg-surfaceElevated transition-colors cursor-pointer">
-                             <img src={creator.avatar} className="w-8 h-8 rounded-full" alt="avatar" />
-                             <div className="flex-1 min-w-0">
-                                 <div className="flex justify-between items-baseline">
-                                     <span className="text-xs font-bold text-textMain truncate">{creator.name}</span>
-                                     <span className="text-[10px] text-textMuted">{2 + i}h ago</span>
-                                 </div>
-                                 <p className="text-xs text-textMuted truncate">Market analysis indicates a strong breakout pattern for $BTC...</p>
-                             </div>
-                         </div>
-                     ))}
-                 </div>
-             </div>
-           </div>
+              {/* Quick Leaderboard */}
+              <Card>
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-sm font-semibold">Top 5 Players</h3>
+                  <Button variant="ghost" size="sm" onClick={() => setActiveTab('Leaderboard')}>View All</Button>
+                </div>
+                <div className="space-y-2">
+                  {leaderboard.slice(0, 5).map((user, i) => (
+                    <div key={user.id} className={`flex items-center justify-between py-2 px-2 rounded-lg ${user.id === currentUser?.id ? 'bg-primary/10' : ''}`}>
+                      <div className="flex items-center gap-3">
+                        <span className={`text-sm font-bold w-5 ${i === 0 ? 'text-yellow-400' : i === 1 ? 'text-gray-400' : i === 2 ? 'text-amber-600' : 'text-textMuted'}`}>{i + 1}</span>
+                        <span className="text-sm font-medium text-textMain truncate max-w-[120px]">{user.displayName}</span>
+                      </div>
+                      <span className="text-xs font-mono text-textMuted">₹{user.totalNetWorth.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            </div>
+          </div>
         )}
 
         {activeTab === 'Markets' && renderMarkets()}
         {activeTab === 'Portfolio' && renderPortfolio()}
-        {activeTab === 'News Feed' && renderNews()}
-        {activeTab === 'Community' && renderCommunity()}
-
+        {activeTab === 'Leaderboard' && renderLeaderboard()}
       </main>
     </div>
   );
