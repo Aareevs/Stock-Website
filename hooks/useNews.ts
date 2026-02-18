@@ -21,12 +21,18 @@ export function useNews() {
   // Fetch initial news events
   useEffect(() => {
     const fetch = async () => {
-      const { data } = await supabase
-        .from('news_events')
-        .select('*')
-        .order('created_at', { ascending: false });
-      if (data) setNewsEvents(data as NewsEvent[]);
-      setLoading(false);
+      try {
+        const { data, error } = await supabase
+          .from('news_events')
+          .select('*')
+          .order('created_at', { ascending: false });
+        if (error) throw error;
+        if (data) setNewsEvents(data as NewsEvent[]);
+      } catch (err) {
+        console.error('Error fetching news events:', err);
+      } finally {
+        setLoading(false);
+      }
     };
     fetch();
   }, []);

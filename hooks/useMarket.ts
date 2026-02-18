@@ -18,12 +18,18 @@ export function useMarket() {
   // Fetch initial market data
   useEffect(() => {
     const fetch = async () => {
-      const { data } = await supabase
-        .from('market_items')
-        .select('*')
-        .order('symbol');
-      if (data) setMarketItems(data as MarketItem[]);
-      setLoading(false);
+      try {
+        const { data, error } = await supabase
+          .from('market_items')
+          .select('*')
+          .order('symbol');
+        if (error) throw error;
+        if (data) setMarketItems(data as MarketItem[]);
+      } catch (err) {
+        console.error('Error fetching market items:', err);
+      } finally {
+        setLoading(false);
+      }
     };
     fetch();
   }, []);

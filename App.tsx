@@ -20,6 +20,7 @@ const App: React.FC = () => {
 
   // Show loading state
   if (authLoading || marketLoading) {
+    console.log('App loading:', { authLoading, marketLoading });
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center space-y-4">

@@ -32,13 +32,22 @@ export function usePortfolio(userId: string | undefined) {
     if (!userId) { setLoading(false); return; }
 
     const fetchAll = async () => {
-      const [{ data: pData }, { data: tData }] = await Promise.all([
-        supabase.from('portfolios').select('*').eq('user_id', userId),
-        supabase.from('transactions').select('*').eq('user_id', userId).order('created_at', { ascending: false }),
-      ]);
-      if (pData) setPortfolio(pData as PortfolioItem[]);
-      if (tData) setTransactions(tData as Transaction[]);
-      setLoading(false);
+      try {
+        const [{ data: pData, error: pError }, { data: tData, error: tError }] = await Promise.all([
+          supabase.from('portfolios').select('*').eq('user_id', userId),
+          supabase.from('transactions').select('*').eq('user_id', userId).order('created_at', { ascending: false }),
+        ]);
+        
+        if (pError) throw pError;
+        if (tError) throw tError;
+
+        if (pData) setPortfolio(pData as PortfolioItem[]);
+        if (tData) setTransactions(tData as Transaction[]);
+      } catch (err) {
+        console.error('Error fetching portfolio:', err);
+      } finally {
+        setLoading(false);
+      }
     };
 
     fetchAll();
