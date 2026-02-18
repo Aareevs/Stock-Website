@@ -34,12 +34,12 @@ export const MainChart: React.FC<MainChartProps> = ({ data }) => {
             axisLine={false} 
             tickLine={false} 
             tick={{ fill: '#8FA6A0', fontSize: 12 }}
-            tickFormatter={(value) => `₹${value.toLocaleString()}`}
+            tickFormatter={(value) => `₹${(value ?? 0).toLocaleString()}`}
           />
           <Tooltip 
             contentStyle={{ backgroundColor: '#18211E', borderColor: '#1F2A26', borderRadius: '8px', color: '#E6F1EE' }}
             itemStyle={{ color: '#1ED3A6' }}
-            formatter={(value: number) => [`₹${value.toFixed(2)}`, 'Price']}
+            formatter={(value: number) => [`₹${(value ?? 0).toFixed(2)}`, 'Price']}
           />
           <Area 
             type="monotone" 
@@ -163,12 +163,12 @@ export const StockChart: React.FC<StockChartProps> = ({ data, color = '#1ED3A6' 
             axisLine={false}
             tickLine={false}
             tick={{ fill: '#8FA6A0', fontSize: 11 }}
-            tickFormatter={(value) => `₹${value.toLocaleString()}`}
+            tickFormatter={(value) => `₹${(value ?? 0).toLocaleString()}`}
           />
           <Tooltip
             contentStyle={{ backgroundColor: '#18211E', borderColor: '#1F2A26', borderRadius: '8px', color: '#E6F1EE' }}
             itemStyle={{ color: chartColor }}
-            formatter={(value: number) => [`₹${value.toFixed(2)}`, 'Price']}
+            formatter={(value: number) => [`₹${(value ?? 0).toFixed(2)}`, 'Price']}
           />
           <Area
             type="monotone"

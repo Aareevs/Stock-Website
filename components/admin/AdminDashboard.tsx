@@ -191,8 +191,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ profile, marketI
                     <ArrowLeft className="w-5 h-5 text-textMuted" />
                   </button>
                   <h3 className="text-xl font-bold">{selectedChart.name} ({selectedChart.symbol})</h3>
-                  <span className={`text-sm font-semibold ${selectedChart.change >= 0 ? 'text-primary' : 'text-negative'}`}>
-                    {selectedChart.change >= 0 ? '+' : ''}{selectedChart.change.toFixed(2)}%
+                  <span className={`text-sm font-semibold ${(selectedChart.change ?? 0) >= 0 ? 'text-primary' : 'text-negative'}`}>
+                    {(selectedChart.change ?? 0) >= 0 ? '+' : ''}{(selectedChart.change ?? 0).toFixed(2)}%
                   </span>
                 </div>
                 <Card padding="sm">
@@ -214,13 +214,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ profile, marketI
                         <div className="text-xs text-textMuted">{item.symbol}</div>
                       </div>
                       <div className="text-right">
-                        <div className="font-mono font-bold">₹{item.price.toFixed(2)}</div>
-                        <div className={`text-xs font-semibold ${item.change >= 0 ? 'text-primary' : 'text-negative'}`}>
-                          {item.change >= 0 ? '+' : ''}{item.change.toFixed(2)}%
+                        <div className="font-mono font-bold">₹{(item.price ?? 0).toFixed(2)}</div>
+                        <div className={`text-xs font-semibold ${(item.change ?? 0) >= 0 ? 'text-primary' : 'text-negative'}`}>
+                          {(item.change ?? 0) >= 0 ? '+' : ''}{(item.change ?? 0).toFixed(2)}%
                         </div>
                       </div>
                     </div>
-                    <MiniSparkline data={(item.priceHistory || []).slice(-30)} color={item.change >= 0 ? '#1ED3A6' : '#EF4444'} />
+                    <MiniSparkline data={(item.priceHistory || []).slice(-30)} color={(item.change ?? 0) >= 0 ? '#1ED3A6' : '#EF4444'} />
                   </Card>
                 ))}
               </div>

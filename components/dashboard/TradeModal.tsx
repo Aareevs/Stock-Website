@@ -58,10 +58,10 @@ export const TradeModal: React.FC<TradeModalProps> = ({
           <div className="flex justify-between items-center bg-surfaceElevated p-3 rounded-lg">
             <span className="text-sm text-textMuted">Current Price</span>
             <div className="text-right">
-              <div className="font-bold text-lg font-mono">₹{asset.price.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-              <div className={`text-xs flex items-center justify-end gap-1 ${asset.change >= 0 ? 'text-primary' : 'text-negative'}`}>
-                 {asset.change >= 0 ? <TrendingUp className="w-3 h-3"/> : <TrendingDown className="w-3 h-3"/>}
-                 {asset.change >= 0 ? '+' : ''}{asset.change.toFixed(2)}%
+              <div className="font-bold text-lg font-mono">₹{(asset.price ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+              <div className={`text-xs flex items-center justify-end gap-1 ${(asset.change ?? 0) >= 0 ? 'text-primary' : 'text-negative'}`}>
+                 {(asset.change ?? 0) >= 0 ? <TrendingUp className="w-3 h-3"/> : <TrendingDown className="w-3 h-3"/>}
+                 {(asset.change ?? 0) >= 0 ? '+' : ''}{(asset.change ?? 0).toFixed(2)}%
               </div>
             </div>
           </div>
