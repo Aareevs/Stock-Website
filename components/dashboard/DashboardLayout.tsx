@@ -99,8 +99,8 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
 
   // Portfolio value
   const totalPortfolioValueCalc = portfolio.reduce((acc, item) => {
-    const currentPrice = marketItems.find(m => m.symbol === item.symbol)?.price || 0;
-    return acc + (item.amount * currentPrice);
+    const currentPrice = marketItems.find(m => m.symbol === item.symbol)?.price ?? 0;
+    return acc + ((item.amount ?? 0) * currentPrice);
   }, 0);
 
   // If viewing a stock detail chart
@@ -123,8 +123,8 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
 
   const renderOverview = () => {
     const totalPortfolioValue = portfolio.reduce((acc, item) => {
-      const currentPrice = marketItems.find(m => m.symbol === item.symbol)?.price || 0;
-      return acc + (item.amount * currentPrice);
+      const currentPrice = marketItems.find(m => m.symbol === item.symbol)?.price ?? 0;
+      return acc + ((item.amount ?? 0) * currentPrice);
     }, 0);
     const totalNetWorth = balance + totalPortfolioValue;
 
@@ -292,8 +292,8 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
 
   const renderPortfolio = () => {
     const totalPortfolioValue = portfolio.reduce((acc, item) => {
-      const currentPrice = marketItems.find(m => m.symbol === item.symbol)?.price || 0;
-      return acc + (item.amount * currentPrice);
+      const currentPrice = marketItems.find(m => m.symbol === item.symbol)?.price ?? 0;
+      return acc + ((item.amount ?? 0) * currentPrice);
     }, 0);
     const totalNetWorth = balance + totalPortfolioValue;
 
@@ -320,7 +320,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
             <h3 className="text-sm font-semibold mb-2">Allocation</h3>
             <div className="h-32">
               {portfolio.length > 0 ? (
-                <SentimentChart data={portfolio.map((i, idx) => ({ name: i.symbol, value: i.amount * (marketItems.find(m => m.symbol === i.symbol)?.price || 0), color: ['#1ED3A6', '#14B8A6', '#0D9488', '#0F766E', '#10B981', '#34D399'][idx % 6] }))} />
+                <SentimentChart data={portfolio.map((i, idx) => ({ name: i.symbol, value: (i.amount ?? 0) * (marketItems.find(m => m.symbol === i.symbol)?.price ?? 0), color: ['#1ED3A6', '#14B8A6', '#0D9488', '#0F766E', '#10B981', '#34D399'][idx % 6] }))} />
               ) : (
                 <div className="h-full flex items-center justify-center text-textMuted text-xs">No assets owned</div>
               )}
@@ -352,15 +352,17 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
                 <tbody className="text-sm">
                   {portfolio.map((item) => {
                     const marketData = marketItems.find(m => m.symbol === item.symbol);
-                    const currentPrice = marketData?.price || 0;
-                    const totalValue = item.amount * currentPrice;
-                    const pnl = (currentPrice - item.avg_price) * item.amount;
+                    const currentPrice = marketData?.price ?? 0;
+                    const amount = item.amount ?? 0;
+                    const avgPrice = item.avg_price ?? 0;
+                    const totalValue = amount * currentPrice;
+                    const pnl = (currentPrice - avgPrice) * amount;
                     return (
                       <tr key={item.symbol} className="border-b border-border/50">
                         <td className="py-4 pl-2">
                           <div className="flex items-center gap-3">
                             <div className="w-8 h-8 rounded-full bg-surfaceElevated border border-border flex items-center justify-center font-bold text-textMain">
-                              {item.symbol[0]}
+                              {item.symbol?.[0] ?? '?'}
                             </div>
                             <div>
                               <div className="font-semibold text-textMain">{marketItems.find(m => m.symbol === item.symbol)?.name || item.symbol}</div>
@@ -368,8 +370,8 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
                             </div>
                           </div>
                         </td>
-                        <td className="py-4 font-mono">{item.amount.toFixed(2)}</td>
-                        <td className="py-4 font-mono text-textMuted">₹{(item.avg_price ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                        <td className="py-4 font-mono">{amount.toFixed(2)}</td>
+                        <td className="py-4 font-mono text-textMuted">₹{avgPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                         <td className="py-4 font-mono">₹{currentPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                         <td className={`py-4 font-mono font-bold ${pnl >= 0 ? 'text-primary' : 'text-negative'}`}>
                           {pnl >= 0 ? '+' : ''}₹{pnl.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
