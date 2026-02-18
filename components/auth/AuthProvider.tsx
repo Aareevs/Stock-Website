@@ -60,6 +60,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, []);
 
+  // Poll to refresh profile every 3 seconds (for balance updates after trades)
+  useEffect(() => {
+    if (!user) return;
+    
+    const interval = setInterval(async () => {
+      const { data } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single();
+      if (data) {
+        setProfile(prev => {
+          // Only update if cash_balance changed
+          if (prev?.cash_balance !== data.cash_balance) {
+            return data as Profile;
+          }
+          return prev;
+        });
+      }
+    }, 3000);
+    
+    return () => clearInterval(interval);
+  }, [user]);
+
   const signIn = async (username: string, password: string) => {
     // Look up user by username and password
     const { data, error } = await supabase

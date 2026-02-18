@@ -31,6 +31,7 @@ interface DashboardLayoutProps {
   onLogout: () => void;
   onOpenAdmin: () => void;
   isAdmin: boolean;
+  onRefreshProfile: () => Promise<void>;
 }
 
 export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
@@ -43,6 +44,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
   onLogout,
   onOpenAdmin,
   isAdmin,
+  onRefreshProfile,
 }) => {
   const [activeTab, setActiveTab] = useState('Overview');
   const [tradeModalOpen, setTradeModalOpen] = useState(false);
@@ -90,6 +92,8 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
 
     if (!result.error) {
       setTradeModalOpen(false);
+      // Refresh profile to update cash balance
+      await onRefreshProfile();
     }
   };
 

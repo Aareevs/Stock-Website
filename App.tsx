@@ -14,7 +14,7 @@ const STARTING_CAPITAL = 100000; // ₹1 Lakh
 type View = 'dashboard' | 'admin_login' | 'admin_dashboard';
 
 const App: React.FC = () => {
-  const { profile, user, loading: authLoading, signOut, isAdmin } = useAuth();
+  const { profile, user, loading: authLoading, signOut, isAdmin, refreshProfile } = useAuth();
   const { marketItems, setMarketItems, loading: marketLoading } = useMarket();
   const { newsEvents, loading: newsLoading, triggerNews, stopNews } = useNews();
   const { portfolio, transactions, loading: portfolioLoading, executeTrade } = usePortfolio(user?.id);
@@ -154,6 +154,7 @@ const App: React.FC = () => {
       onLogout={signOut}
       onOpenAdmin={() => setView(isAdmin ? 'admin_dashboard' : 'admin_login')}
       isAdmin={isAdmin}
+      onRefreshProfile={refreshProfile}
     />
   );
 };
