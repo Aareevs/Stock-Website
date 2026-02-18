@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { DashboardLayout } from './components/dashboard/DashboardLayout';
 import { UserLogin } from './components/auth/UserLogin';
 import { AdminLogin } from './components/admin/AdminLogin';
@@ -7,6 +7,7 @@ import { ViewState, User, MarketItem, NewsEvent } from './types';
 import { INITIAL_MARKET_ITEMS } from './constants';
 import { generateUsers } from './data/users';
 import { tickAllPrices, applyNewsEvent, stopNewsEvent } from './engine/priceEngine';
+import { useSync, SyncMessage } from './hooks/useSync';
 
 const STORAGE_KEY = 'novatrade_users';
 const MARKET_KEY = 'novatrade_market';
@@ -43,25 +44,55 @@ const App: React.FC = () => {
     return [];
   });
 
-  // Save users to localStorage whenever they change
+  // ─── WebSocket real-time sync ───
+  const handleSyncMessage = (msg: SyncMessage) => {
+    switch (msg.type) {
+      case 'NEWS_TRIGGERED': {
+        const event = msg.payload.event as NewsEvent;
+        const updatedMarket = msg.payload.market as MarketItem[];
+        setNewsEvents(prev => [event, ...prev]);
+        setMarketItems(updatedMarket);
+        break;
+      }
+      case 'NEWS_STOPPED': {
+        const { eventId, market: stoppedMarket } = msg.payload as any;
+        setNewsEvents(prev => prev.map(e => e.id === eventId ? { ...e, active: false } : e));
+        setMarketItems(stoppedMarket);
+        break;
+      }
+      case 'MARKET_UPDATE': {
+        setMarketItems(msg.payload);
+        break;
+      }
+      case 'SIMULATION_RESET': {
+        const freshUsers = generateUsers();
+        setUsers(freshUsers);
+        setMarketItems(INITIAL_MARKET_ITEMS);
+        setNewsEvents([]);
+        setLoggedInUserId(null);
+        localStorage.removeItem(LOGGED_IN_KEY);
+        setView(ViewState.DASHBOARD);
+        break;
+      }
+    }
+  };
+
+  const { broadcast } = useSync(handleSyncMessage);
+
+  // ─── Persist to localStorage ───
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(users));
   }, [users]);
 
-  // Save market to localStorage
   useEffect(() => {
     localStorage.setItem(MARKET_KEY, JSON.stringify(marketItems));
   }, [marketItems]);
 
-  // Save news events to localStorage + bump version
   useEffect(() => {
     localStorage.setItem(NEWS_KEY, JSON.stringify(newsEvents));
   }, [newsEvents]);
 
-  // Track last known news count for detecting new flashes
-  const lastNewsCountRef = useRef(newsEvents.length);
-
-  // 5-second price tick
+  // ─── Price tick every 5 seconds ───
   useEffect(() => {
     const interval = setInterval(() => {
       setMarketItems(prev => tickAllPrices(prev));
@@ -69,66 +100,7 @@ const App: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
-  // Cross-tab sync via storage event (fires ONLY in other tabs)
-  useEffect(() => {
-    const handleStorage = (e: StorageEvent) => {
-      if (e.key === NEWS_KEY && e.newValue) {
-        try {
-          const parsed: NewsEvent[] = JSON.parse(e.newValue);
-          setNewsEvents(parsed);
-        } catch { /* ignore */ }
-      }
-      if (e.key === MARKET_KEY && e.newValue) {
-        try {
-          const parsed: MarketItem[] = JSON.parse(e.newValue);
-          setMarketItems(parsed);
-        } catch { /* ignore */ }
-      }
-      if (e.key === STORAGE_KEY && e.newValue) {
-        try {
-          const parsed: User[] = JSON.parse(e.newValue);
-          setUsers(parsed);
-        } catch { /* ignore */ }
-      }
-    };
-    window.addEventListener('storage', handleStorage);
-    return () => window.removeEventListener('storage', handleStorage);
-  }, []);
-
-  // Same-tab sync: poll localStorage for news changes caused by view switches
-  // (storage event doesn't fire for same-tab changes)
-  useEffect(() => {
-    const poll = setInterval(() => {
-      const savedNews = localStorage.getItem(NEWS_KEY);
-      if (savedNews) {
-        try {
-          const parsed: NewsEvent[] = JSON.parse(savedNews);
-          // Only update if there's actually a difference in event count or IDs
-          setNewsEvents(current => {
-            if (parsed.length !== current.length || (parsed[0]?.id !== current[0]?.id) || (parsed[0]?.active !== current[0]?.active)) {
-              return parsed;
-            }
-            return current;
-          });
-        } catch { /* ignore */ }
-      }
-      const savedMarket = localStorage.getItem(MARKET_KEY);
-      if (savedMarket) {
-        try {
-          const parsed: MarketItem[] = JSON.parse(savedMarket);
-          setMarketItems(current => {
-            // Only sync if first item price differs (cheap check)
-            if (parsed.length > 0 && current.length > 0 && parsed[0].price !== current[0].price) {
-              return parsed;
-            }
-            return current;
-          });
-        } catch { /* ignore */ }
-      }
-    }, 1500);
-    return () => clearInterval(poll);
-  }, []);
-
+  // ─── Handlers ───
   const handleUserLogin = (userId: string) => {
     setLoggedInUserId(userId);
     localStorage.setItem(LOGGED_IN_KEY, userId);
@@ -149,34 +121,46 @@ const App: React.FC = () => {
   };
 
   const handleResetSimulation = () => {
-    // Clear all localStorage
     localStorage.removeItem(STORAGE_KEY);
     localStorage.removeItem(MARKET_KEY);
     localStorage.removeItem(LOGGED_IN_KEY);
     localStorage.removeItem(NEWS_KEY);
 
-    // Regenerate fresh state
     const freshUsers = generateUsers();
     setUsers(freshUsers);
     setMarketItems(INITIAL_MARKET_ITEMS);
     setNewsEvents([]);
     setLoggedInUserId(null);
     setView(ViewState.DASHBOARD);
+
+    // Broadcast reset to all participants
+    broadcast({ type: 'SIMULATION_RESET' });
   };
 
   const handleTriggerNewsEvent = (event: NewsEvent) => {
-    setMarketItems(prev => applyNewsEvent(prev, event));
+    const updatedMarket = applyNewsEvent(marketItems, event);
+    setMarketItems(updatedMarket);
     setNewsEvents(prev => [event, ...prev]);
+
+    // Broadcast to all participants
+    broadcast({
+      type: 'NEWS_TRIGGERED',
+      payload: { event, market: updatedMarket },
+    });
   };
 
   const handleStopNewsEvent = (eventId: string) => {
-    setNewsEvents(prev => {
-      const updated = prev.map(e => e.id === eventId ? { ...e, active: false } : e);
-      const stoppedEvent = prev.find(e => e.id === eventId);
-      if (stoppedEvent) {
-        setMarketItems(items => stopNewsEvent(items, stoppedEvent));
-      }
-      return updated;
+    const stoppedEvent = newsEvents.find(e => e.id === eventId);
+    if (!stoppedEvent) return;
+
+    const updatedMarket = stopNewsEvent(marketItems, stoppedEvent);
+    setMarketItems(updatedMarket);
+    setNewsEvents(prev => prev.map(e => e.id === eventId ? { ...e, active: false } : e));
+
+    // Broadcast to all participants
+    broadcast({
+      type: 'NEWS_STOPPED',
+      payload: { eventId, market: updatedMarket },
     });
   };
 
