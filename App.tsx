@@ -75,25 +75,25 @@ const App: React.FC = () => {
           .eq('role', 'participant');
         if (profileError) throw profileError;
 
-        // Clear all portfolios
+        // Clear all portfolios (gt '' matches all non-null ids)
         const { error: portfolioError } = await supabase
           .from('portfolios')
           .delete()
-          .neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all
+          .gt('id', '00000000-0000-0000-0000-000000000000');
         if (portfolioError) throw portfolioError;
 
         // Clear all transactions
         const { error: txError } = await supabase
           .from('transactions')
           .delete()
-          .neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all
+          .gt('id', '00000000-0000-0000-0000-000000000000');
         if (txError) throw txError;
 
-        // Deactivate all news events
+        // DELETE all news events (not just deactivate)
         const { error: newsError } = await supabase
           .from('news_events')
-          .update({ active: false })
-          .eq('active', true);
+          .delete()
+          .gt('id', '00000000-0000-0000-0000-000000000000');
         if (newsError) throw newsError;
 
         // Reset market prices
@@ -119,8 +119,12 @@ const App: React.FC = () => {
             .eq('symbol', symbol);
         }
 
+        // Force page reload to refresh all data
+        window.location.reload();
+
         return { error: null };
       } catch (err: any) {
+        console.error('Reset error:', err);
         return { error: err.message || 'Failed to reset auction' };
       }
     };

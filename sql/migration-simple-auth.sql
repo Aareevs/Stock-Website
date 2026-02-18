@@ -83,6 +83,7 @@ DROP POLICY IF EXISTS "Admins can insert news" ON news_events;
 DROP POLICY IF EXISTS "Admins can update news" ON news_events;
 DROP POLICY IF EXISTS "Anyone can insert news" ON news_events;
 DROP POLICY IF EXISTS "Anyone can update news" ON news_events;
+DROP POLICY IF EXISTS "Anyone can delete news" ON news_events;
 
 CREATE POLICY "Anyone can read news"
   ON news_events FOR SELECT USING (true);
@@ -92,6 +93,9 @@ CREATE POLICY "Anyone can insert news"
 
 CREATE POLICY "Anyone can update news"
   ON news_events FOR UPDATE USING (true);
+
+CREATE POLICY "Anyone can delete news"
+  ON news_events FOR DELETE USING (true);
 
 -- Step 4: Make sure market data exists
 INSERT INTO market_items (symbol, name, price, sentiment, icon) VALUES
