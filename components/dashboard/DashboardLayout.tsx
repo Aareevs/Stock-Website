@@ -641,6 +641,43 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
           </div>
         </header>
 
+        {/* Breaking News Banner — visible on all tabs when a flash is active */}
+        {(() => {
+          const activeEvent = newsEvents.find(e => e.active);
+          if (!activeEvent) return null;
+          const crashCompany = marketItems.find(m => m.symbol === activeEvent.crashCompany);
+          return (
+            <div className="mb-6 relative overflow-hidden rounded-xl border border-orange-500/30 bg-gradient-to-r from-orange-500/10 via-red-500/5 to-orange-500/10">
+              <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-orange-500 via-red-500 to-orange-500 animate-pulse" />
+              <div className="p-4">
+                <div className="flex items-center gap-3 mb-2">
+                  <span className="flex items-center gap-1.5 px-2 py-0.5 bg-red-500 text-white rounded text-[10px] font-bold uppercase tracking-wider">
+                    <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                    Live
+                  </span>
+                  <span className="text-xs text-textMuted">Breaking News</span>
+                </div>
+                <h3 className="text-sm md:text-base font-bold text-orange-400 mb-2">{activeEvent.headline}</h3>
+                <div className="flex flex-wrap gap-2">
+                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-negative/10 text-negative rounded-lg text-xs font-semibold">
+                    <TrendingDown className="w-3 h-3" />
+                    {crashCompany?.name || activeEvent.crashCompany} {activeEvent.crashPercent}%
+                  </span>
+                  {activeEvent.boostCompanies.map(sym => {
+                    const company = marketItems.find(m => m.symbol === sym);
+                    return (
+                      <span key={sym} className="inline-flex items-center gap-1 px-2 py-1 bg-primary/10 text-primary rounded-lg text-xs font-semibold">
+                        <TrendingUp className="w-3 h-3" />
+                        {company?.name || sym} +{activeEvent.boostPercent}%
+                      </span>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
         {activeTab === 'Overview' && (
           <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
             <div className="xl:col-span-3 space-y-6">

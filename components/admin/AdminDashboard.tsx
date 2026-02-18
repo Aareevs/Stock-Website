@@ -12,9 +12,10 @@ interface AdminDashboardProps {
   onBack: () => void;
   onResetSimulation: () => void;
   onTriggerNewsEvent: (event: NewsEvent) => void;
+  onStopNewsEvent: (eventId: string) => void;
 }
 
-export const AdminDashboard: React.FC<AdminDashboardProps> = ({ users, marketItems, newsEvents, onBack, onResetSimulation, onTriggerNewsEvent }) => {
+export const AdminDashboard: React.FC<AdminDashboardProps> = ({ users, marketItems, newsEvents, onBack, onResetSimulation, onTriggerNewsEvent, onStopNewsEvent }) => {
   const [activeView, setActiveView] = useState<'leaderboard' | 'charts' | 'news'>('leaderboard');
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [selectedChart, setSelectedChart] = useState<MarketItem | null>(null);
@@ -75,6 +76,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ users, marketIte
       boostCompanies: boostSymbols,
       boostPercent: boostPercent,
       timestamp: Date.now(),
+      active: true,
     };
     onTriggerNewsEvent(event);
     setCrashSymbol('');
@@ -563,14 +565,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ users, marketIte
 
                 <button
                   onClick={handleTriggerNews}
-                  disabled={!crashSymbol}
+                  disabled={!crashSymbol || newsEvents.some(e => e.active)}
                   className={`w-full py-3 rounded-lg font-bold text-sm flex items-center justify-center gap-2 transition-all ${
-                    crashSymbol
+                    crashSymbol && !newsEvents.some(e => e.active)
                       ? 'bg-gradient-to-r from-orange-500 to-red-500 text-white hover:from-orange-600 hover:to-red-600 shadow-lg shadow-orange-500/20'
                       : 'bg-surface text-textMuted border border-border cursor-not-allowed'
                   }`}
                 >
-                  <Zap className="w-4 h-4" /> Trigger News Flash
+                  <Zap className="w-4 h-4" />
+                  {newsEvents.some(e => e.active) ? 'Stop active flash first' : 'Trigger News Flash'}
                 </button>
               </div>
             </Card>
@@ -593,12 +596,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ users, marketIte
                   {newsEvents.map(event => {
                     const crashCompany = marketItems.find(m => m.symbol === event.crashCompany);
                     return (
-                      <div key={event.id} className="bg-surfaceElevated rounded-lg p-4 border border-border">
+                      <div key={event.id} className={`rounded-lg p-4 border ${event.active ? 'bg-orange-500/5 border-orange-500/30' : 'bg-surfaceElevated border-border'}`}>
                         <div className="flex items-start justify-between mb-2">
                           <div className="text-sm font-semibold text-orange-400 flex-1">{event.headline}</div>
-                          <span className="text-xs text-textMuted whitespace-nowrap ml-2">
-                            {new Date(event.timestamp).toLocaleString('en-IN', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' })}
-                          </span>
+                          <div className="flex items-center gap-2 ml-2">
+                            {event.active && (
+                              <button
+                                onClick={() => onStopNewsEvent(event.id)}
+                                className="px-3 py-1 bg-negative/10 text-negative border border-negative/30 rounded text-xs font-bold hover:bg-negative/20 transition-colors"
+                              >
+                                Stop Flash
+                              </button>
+                            )}
+                            {!event.active && (
+                              <span className="px-2 py-0.5 bg-surface text-textMuted border border-border rounded text-xs font-semibold">Ended</span>
+                            )}
+                            <span className="text-xs text-textMuted whitespace-nowrap">
+                              {new Date(event.timestamp).toLocaleString('en-IN', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' })}
+                            </span>
+                          </div>
                         </div>
                         <div className="flex flex-wrap gap-2 text-xs">
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-negative/10 text-negative rounded font-semibold">

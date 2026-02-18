@@ -111,3 +111,12 @@ export const applyNewsEvent = (items: MarketItem[], event: NewsEvent): MarketIte
   });
 };
 
+// Stop a news event — revert affected stocks to Neutral sentiment
+export const stopNewsEvent = (items: MarketItem[], event: NewsEvent): MarketItem[] => {
+  return items.map(item => {
+    if (item.symbol === event.crashCompany || event.boostCompanies.includes(item.symbol)) {
+      return { ...item, sentiment: 'Neutral' as const };
+    }
+    return item;
+  });
+};

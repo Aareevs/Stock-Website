@@ -6,7 +6,7 @@ import { AdminDashboard } from './components/admin/AdminDashboard';
 import { ViewState, User, MarketItem, NewsEvent } from './types';
 import { INITIAL_MARKET_ITEMS } from './constants';
 import { generateUsers } from './data/users';
-import { tickAllPrices, applyNewsEvent } from './engine/priceEngine';
+import { tickAllPrices, applyNewsEvent, stopNewsEvent } from './engine/priceEngine';
 
 const STORAGE_KEY = 'novatrade_users';
 const MARKET_KEY = 'novatrade_market';
@@ -106,6 +106,17 @@ const App: React.FC = () => {
     setNewsEvents(prev => [event, ...prev]);
   };
 
+  const handleStopNewsEvent = (eventId: string) => {
+    setNewsEvents(prev => {
+      const updated = prev.map(e => e.id === eventId ? { ...e, active: false } : e);
+      const stoppedEvent = prev.find(e => e.id === eventId);
+      if (stoppedEvent) {
+        setMarketItems(items => stopNewsEvent(items, stoppedEvent));
+      }
+      return updated;
+    });
+  };
+
   const currentUser = users.find(u => u.id === loggedInUserId) || null;
 
   // Show login page if no user is logged in and not in admin flow
@@ -148,6 +159,7 @@ const App: React.FC = () => {
           onBack={() => setView(ViewState.DASHBOARD)}
           onResetSimulation={handleResetSimulation}
           onTriggerNewsEvent={handleTriggerNewsEvent}
+          onStopNewsEvent={handleStopNewsEvent}
         />
       )}
     </>

@@ -59,6 +59,7 @@ export interface NewsEvent {
   boostCompanies: string[];
   boostPercent: number;
   timestamp: number;
+  active: boolean;
 }
 
 export enum ViewState {
