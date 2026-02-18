@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Sidebar } from './Sidebar';
 import { Card } from '../ui/Card';
 import { MainChart, MiniSparkline, SentimentChart } from './Charts';
 import { METRICS, SENTIMENT_DATA, generateChartData } from '../../constants';
-import { ArrowUpRight, ArrowDownRight, Newspaper, LogIn, LogOut as LogOutIcon, User as UserIcon, History, TrendingUp, TrendingDown, Zap, Trophy } from 'lucide-react';
+import { ArrowUpRight, ArrowDownRight, Newspaper, LogIn, LogOut as LogOutIcon, User as UserIcon, History, TrendingUp, TrendingDown, Zap, Trophy, X, AlertTriangle, Clock } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { TradeModal } from './TradeModal';
 import { MarketItem, PortfolioItem, User, Transaction, NewsEvent } from '../../types';
@@ -36,6 +36,23 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
   const [selectedStock, setSelectedStock] = useState<MarketItem | null>(null);
   const [loginDropdown, setLoginDropdown] = useState(false);
   const [loginSearch, setLoginSearch] = useState('');
+  const [newsToast, setNewsToast] = useState<NewsEvent | null>(null);
+
+  // Track previous news event count to detect new flashes
+  const prevNewsCountRef = useRef(newsEvents.length);
+
+  useEffect(() => {
+    if (newsEvents.length > prevNewsCountRef.current) {
+      // A new flash was triggered — show toast
+      const newest = newsEvents[0];
+      if (newest && newest.active) {
+        setNewsToast(newest);
+        const timer = setTimeout(() => setNewsToast(null), 8000);
+        return () => clearTimeout(timer);
+      }
+    }
+    prevNewsCountRef.current = newsEvents.length;
+  }, [newsEvents]);
 
   const balance = currentUser?.cashBalance ?? 0;
   const portfolio = currentUser?.portfolio ?? [];
@@ -526,66 +543,134 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
     );
   };
 
-  const renderNewsEvents = () => (
-    <div className="space-y-6">
-      <div className="flex items-center gap-3 mb-2">
-        <Newspaper className="w-8 h-8 text-orange-400" />
-        <div>
-          <h2 className="text-2xl font-bold">News Events</h2>
-          <p className="text-textMuted text-sm">Market-moving news that affects stock prices</p>
-        </div>
-      </div>
+  const renderNewsEvents = () => {
+    const activeEvent = newsEvents.find(e => e.active);
+    const pastEvents = newsEvents.filter(e => !e.active);
 
-      {newsEvents.length === 0 ? (
-        <Card className="text-center py-16">
-          <Newspaper className="w-12 h-12 mx-auto text-textMuted mb-4 opacity-30" />
-          <h3 className="text-xl font-bold mb-2">No News Yet</h3>
-          <p className="text-textMuted">Market-moving events will appear here when triggered by the admin.</p>
-        </Card>
-      ) : (
-        <div className="space-y-4">
-          {newsEvents.map((event, index) => {
-            const crashCompany = marketItems.find(m => m.symbol === event.crashCompany);
-            return (
-              <Card key={event.id} className={`relative overflow-hidden ${index === 0 ? 'border-orange-500/30' : ''}`}>
-                {index === 0 && (
-                  <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-orange-500 to-red-500" />
-                )}
-                <div className="flex items-start gap-4">
-                  <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${index === 0 ? 'bg-orange-500/20' : 'bg-surfaceElevated'}`}>
-                    <Zap className={`w-5 h-5 ${index === 0 ? 'text-orange-400' : 'text-textMuted'}`} />
+    return (
+      <div className="space-y-8">
+        {/* Header */}
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-orange-500/20 to-red-500/20 flex items-center justify-center">
+            <Newspaper className="w-6 h-6 text-orange-400" />
+          </div>
+          <div>
+            <h2 className="text-2xl font-bold">Market News</h2>
+            <p className="text-textMuted text-sm">Breaking stories & events shaping the market</p>
+          </div>
+        </div>
+
+        {/* Active Flash — Featured Blog Post */}
+        {activeEvent && (() => {
+          const crashCompany = marketItems.find(m => m.symbol === activeEvent.crashCompany);
+          return (
+            <div className="relative overflow-hidden rounded-2xl border border-orange-500/30 bg-gradient-to-br from-orange-500/5 via-surface to-red-500/5">
+              <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-orange-500 via-red-500 to-orange-500" />
+              <div className="p-6 md:p-8">
+                <div className="flex items-center gap-3 mb-4">
+                  <span className="flex items-center gap-1.5 px-2.5 py-1 bg-red-500 text-white rounded-full text-[10px] font-bold uppercase tracking-wider">
+                    <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                    Live
+                  </span>
+                  <span className="flex items-center gap-1 text-xs text-textMuted">
+                    <Clock className="w-3 h-3" />
+                    {new Date(activeEvent.timestamp).toLocaleString('en-IN', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' })}
+                  </span>
+                </div>
+                <h2 className="text-xl md:text-2xl font-bold text-orange-400 mb-3 leading-tight">{activeEvent.headline}</h2>
+                <p className="text-sm text-textMuted mb-5 leading-relaxed max-w-2xl">
+                  Markets are reacting to breaking developments. {crashCompany?.name || activeEvent.crashCompany} shares have plummeted
+                  by {Math.abs(activeEvent.crashPercent)}% as investors rush to exit positions.
+                  {activeEvent.boostCompanies.length > 0 && ` Meanwhile, competitors are seeing gains as capital flows into alternative stocks.`}
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="flex items-center gap-3 p-3 bg-negative/5 rounded-xl border border-negative/20">
+                    <div className="w-10 h-10 rounded-lg bg-negative/10 flex items-center justify-center">
+                      <TrendingDown className="w-5 h-5 text-negative" />
+                    </div>
+                    <div>
+                      <div className="text-xs text-textMuted">Crashing</div>
+                      <div className="font-bold text-negative">{crashCompany?.name || activeEvent.crashCompany}</div>
+                      <div className="text-xs font-mono text-negative">{activeEvent.crashPercent}%</div>
+                    </div>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between gap-4 mb-2">
-                      <h3 className={`font-bold ${index === 0 ? 'text-orange-400' : 'text-textMain'}`}>{event.headline}</h3>
-                      <span className="text-xs text-textMuted whitespace-nowrap">
+                  {activeEvent.boostCompanies.map(sym => {
+                    const company = marketItems.find(m => m.symbol === sym);
+                    return (
+                      <div key={sym} className="flex items-center gap-3 p-3 bg-primary/5 rounded-xl border border-primary/20">
+                        <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                          <TrendingUp className="w-5 h-5 text-primary" />
+                        </div>
+                        <div>
+                          <div className="text-xs text-textMuted">Benefiting</div>
+                          <div className="font-bold text-primary">{company?.name || sym}</div>
+                          <div className="text-xs font-mono text-primary">+{activeEvent.boostPercent}%</div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* Past Events — Blog Cards */}
+        {pastEvents.length === 0 && !activeEvent ? (
+          <Card className="text-center py-16">
+            <Newspaper className="w-12 h-12 mx-auto text-textMuted mb-4 opacity-30" />
+            <h3 className="text-xl font-bold mb-2">No News Yet</h3>
+            <p className="text-textMuted">Market-moving events will appear here when triggered by the admin.</p>
+          </Card>
+        ) : pastEvents.length > 0 && (
+          <div>
+            <h3 className="text-sm font-semibold text-textMuted uppercase tracking-wider mb-4">Previous Stories</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {pastEvents.map(event => {
+                const crashCompany = marketItems.find(m => m.symbol === event.crashCompany);
+                return (
+                  <Card key={event.id} className="hover:border-border transition-colors" hoverEffect>
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="w-7 h-7 rounded-lg bg-orange-500/10 flex items-center justify-center">
+                        <AlertTriangle className="w-3.5 h-3.5 text-orange-400" />
+                      </div>
+                      <span className="text-[10px] text-textMuted uppercase tracking-wider font-semibold">Market Alert</span>
+                      <span className="text-[10px] text-textMuted ml-auto">
                         {new Date(event.timestamp).toLocaleString('en-IN', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' })}
                       </span>
                     </div>
-                    <div className="flex flex-wrap gap-2">
-                      <span className="inline-flex items-center gap-1 px-2 py-1 bg-negative/10 text-negative rounded-lg text-xs font-semibold">
-                        <TrendingDown className="w-3 h-3" />
+                    <h4 className="font-bold text-textMain text-sm mb-2 leading-snug">{event.headline}</h4>
+                    <p className="text-xs text-textMuted mb-3 line-clamp-2">
+                      {crashCompany?.name || event.crashCompany} dropped {Math.abs(event.crashPercent)}%.
+                      {event.boostCompanies.length > 0 && ` ${event.boostCompanies.length} competitor(s) rose +${event.boostPercent}%.`}
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-negative/10 text-negative rounded text-[10px] font-bold">
+                        <TrendingDown className="w-2.5 h-2.5" />
                         {crashCompany?.name || event.crashCompany} {event.crashPercent}%
                       </span>
-                      {event.boostCompanies.map(sym => {
+                      {event.boostCompanies.slice(0, 2).map(sym => {
                         const company = marketItems.find(m => m.symbol === sym);
                         return (
-                          <span key={sym} className="inline-flex items-center gap-1 px-2 py-1 bg-primary/10 text-primary rounded-lg text-xs font-semibold">
-                            <TrendingUp className="w-3 h-3" />
+                          <span key={sym} className="inline-flex items-center gap-1 px-2 py-0.5 bg-primary/10 text-primary rounded text-[10px] font-bold">
+                            <TrendingUp className="w-2.5 h-2.5" />
                             {company?.name || sym} +{event.boostPercent}%
                           </span>
                         );
                       })}
+                      {event.boostCompanies.length > 2 && (
+                        <span className="text-[10px] text-textMuted">+{event.boostCompanies.length - 2} more</span>
+                      )}
                     </div>
-                  </div>
-                </div>
-              </Card>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
+                  </Card>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="flex min-h-screen bg-background text-textMain">
@@ -602,6 +687,57 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
           transactions={transactions.filter(t => t.symbol === selectedAsset?.symbol)}
         />
       )}
+
+      {/* News Flash Toast Notification */}
+      {newsToast && (() => {
+        const crashCompany = marketItems.find(m => m.symbol === newsToast.crashCompany);
+        return (
+          <div
+            className="fixed top-4 right-4 z-[100] w-96 max-w-[calc(100vw-2rem)]"
+            style={{ animation: 'slideInRight 0.4s ease-out' }}
+          >
+            <style>{`@keyframes slideInRight { from { transform: translateX(120%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }`}</style>
+            <div className="bg-surface border border-orange-500/40 rounded-xl shadow-2xl shadow-orange-500/10 overflow-hidden">
+              <div className="h-1 bg-gradient-to-r from-orange-500 via-red-500 to-orange-500" />
+              <div className="p-4">
+                <div className="flex items-start justify-between gap-3 mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="flex items-center gap-1.5 px-2 py-0.5 bg-red-500 text-white rounded-full text-[9px] font-bold uppercase tracking-wider">
+                      <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                      Breaking
+                    </span>
+                  </div>
+                  <button onClick={() => setNewsToast(null)} className="text-textMuted hover:text-textMain flex-shrink-0">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                <h4 className="font-bold text-orange-400 text-sm mb-2">{newsToast.headline}</h4>
+                <div className="flex flex-wrap gap-1.5">
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-negative/10 text-negative rounded text-[10px] font-bold">
+                    <TrendingDown className="w-2.5 h-2.5" />
+                    {crashCompany?.name || newsToast.crashCompany} {newsToast.crashPercent}%
+                  </span>
+                  {newsToast.boostCompanies.slice(0, 2).map(sym => {
+                    const company = marketItems.find(m => m.symbol === sym);
+                    return (
+                      <span key={sym} className="inline-flex items-center gap-1 px-2 py-0.5 bg-primary/10 text-primary rounded text-[10px] font-bold">
+                        <TrendingUp className="w-2.5 h-2.5" />
+                        {company?.name || sym} +{newsToast.boostPercent}%
+                      </span>
+                    );
+                  })}
+                </div>
+                <button
+                  onClick={() => { setNewsToast(null); setActiveTab('News Events'); }}
+                  className="mt-3 w-full py-1.5 bg-orange-500/10 border border-orange-500/20 rounded-lg text-xs font-semibold text-orange-400 hover:bg-orange-500/20 transition-colors"
+                >
+                  View Full Story →
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {loginDropdown && renderLoginSelector()}
 

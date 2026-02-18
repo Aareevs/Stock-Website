@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { DashboardLayout } from './components/dashboard/DashboardLayout';
 import { UserLogin } from './components/auth/UserLogin';
 import { AdminLogin } from './components/admin/AdminLogin';
@@ -58,12 +58,49 @@ const App: React.FC = () => {
     localStorage.setItem(NEWS_KEY, JSON.stringify(newsEvents));
   }, [newsEvents]);
 
+  // Track last known news count for detecting new flashes
+  const lastNewsCountRef = useRef(newsEvents.length);
+
   // 5-second price tick
   useEffect(() => {
     const interval = setInterval(() => {
       setMarketItems(prev => tickAllPrices(prev));
     }, 5000);
     return () => clearInterval(interval);
+  }, []);
+
+  // Poll localStorage every 2s to sync news events & market across tabs/views
+  useEffect(() => {
+    const poll = setInterval(() => {
+      // Sync news events
+      const savedNews = localStorage.getItem(NEWS_KEY);
+      if (savedNews) {
+        try {
+          const parsed: NewsEvent[] = JSON.parse(savedNews);
+          setNewsEvents(current => {
+            if (JSON.stringify(current) !== savedNews) {
+              return parsed;
+            }
+            return current;
+          });
+        } catch { /* ignore */ }
+      }
+
+      // Sync market data
+      const savedMarket = localStorage.getItem(MARKET_KEY);
+      if (savedMarket) {
+        try {
+          const parsed: MarketItem[] = JSON.parse(savedMarket);
+          setMarketItems(current => {
+            if (JSON.stringify(current) !== savedMarket) {
+              return parsed;
+            }
+            return current;
+          });
+        } catch { /* ignore */ }
+      }
+    }, 2000);
+    return () => clearInterval(poll);
   }, []);
 
   const handleUserLogin = (userId: string) => {
