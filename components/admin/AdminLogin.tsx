@@ -10,7 +10,7 @@ interface AdminLoginProps {
 
 export const AdminLogin: React.FC<AdminLoginProps> = ({ onLogin, onBack }) => {
   const { signIn } = useAuth();
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
@@ -21,7 +21,10 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLogin, onBack }) => {
     setError('');
     setIsLoading(true);
 
-    const { error: err } = await signIn(email, password);
+    // If matches email format, use as is. Otherwise append dummy domain.
+    const emailToUse = username.includes('@') ? username : `${username}@vsx.local`;
+
+    const { error: err } = await signIn(emailToUse, password);
     if (err) {
       setError(err);
       setIsLoading(false);
@@ -55,13 +58,13 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLogin, onBack }) => {
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
-              <label className="block text-xs font-semibold text-textMuted uppercase tracking-wider mb-2">Email</label>
+              <label className="block text-xs font-semibold text-textMuted uppercase tracking-wider mb-2">Username or Email</label>
               <input
-                type="email"
-                value={email}
-                onChange={(e) => { setEmail(e.target.value); setError(''); }}
+                type="text"
+                value={username}
+                onChange={(e) => { setUsername(e.target.value); setError(''); }}
                 className="w-full bg-surfaceElevated/50 border border-border rounded-xl px-4 py-3.5 text-textMain placeholder:text-textMuted/50 focus:outline-none focus:border-red-500/50 focus:ring-1 focus:ring-red-500/20 transition-all"
-                placeholder="Admin email"
+                placeholder="Enter admin username"
                 autoFocus
               />
             </div>
@@ -89,7 +92,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLogin, onBack }) => {
               </div>
             )}
 
-            <Button type="submit" disabled={!email || !password || isLoading}
+            <Button type="submit" disabled={!username || !password || isLoading}
               className="w-full py-3.5 bg-red-500 hover:bg-red-600 text-white font-semibold">
               {isLoading ? (
                 <div className="flex items-center gap-2">

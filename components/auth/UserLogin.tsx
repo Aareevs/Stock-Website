@@ -95,18 +95,29 @@ export const UserLogin: React.FC<UserLoginProps> = ({ onOpenAdmin }) => {
     setError('');
     setIsLoading(true);
 
+    const dummyEmail = `${username.toLowerCase().replace(/\s+/g, '')}@vsx.local`;
+
     if (isSignUp) {
       if (!username || !displayName) {
         setError('All fields are required');
         setIsLoading(false);
         return;
       }
-      const { error: err } = await signUp(email, password, username, displayName);
+      // Pass the dummy email to Supabase
+      const { error: err } = await signUp(dummyEmail, password, username, displayName);
       if (err) setError(err);
       else setSignUpSuccess(true);
     } else {
-      const { error: err } = await signIn(email, password);
-      if (err) setError(err);
+      // Login with dummy email
+      const { error: err } = await signIn(dummyEmail, password);
+      // specific error handling for invalid login
+      if (err) {
+        if (err.includes("Invalid login credentials")) {
+          setError("Invalid username or password");
+        } else {
+          setError(err);
+        }
+      }
     }
     setIsLoading(false);
   };
@@ -168,7 +179,7 @@ export const UserLogin: React.FC<UserLoginProps> = ({ onOpenAdmin }) => {
                   <UserPlus className="w-8 h-8 text-primary" />
                 </div>
                 <h2 className="text-2xl font-bold text-textMain">Account Created!</h2>
-                <p className="text-sm text-textMuted">Check your email to confirm, then sign in.</p>
+                <p className="text-sm text-textMuted">Admin approval required. Please wait for activation.</p>
                 <Button onClick={() => { setSignUpSuccess(false); setIsSignUp(false); }} className="mt-4">
                   Go to Sign In
                 </Button>
@@ -187,16 +198,7 @@ export const UserLogin: React.FC<UserLoginProps> = ({ onOpenAdmin }) => {
                 <form onSubmit={handleSubmit} className="space-y-4">
                   {isSignUp && (
                     <>
-                      <div>
-                        <label className="block text-xs font-semibold text-textMuted uppercase tracking-wider mb-2">Username</label>
-                        <input
-                          type="text"
-                          value={username}
-                          onChange={(e) => { setUsername(e.target.value); setError(''); }}
-                          className="w-full bg-surfaceElevated/50 border border-border rounded-xl px-4 py-3 text-textMain placeholder:text-textMuted/50 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-all"
-                          placeholder="Choose a username"
-                        />
-                      </div>
+                      {/* Removed separate Username input here as it's now the main input below */}
                       <div>
                         <label className="block text-xs font-semibold text-textMuted uppercase tracking-wider mb-2">Display Name</label>
                         <input
@@ -211,14 +213,15 @@ export const UserLogin: React.FC<UserLoginProps> = ({ onOpenAdmin }) => {
                   )}
 
                   <div>
-                    <label className="block text-xs font-semibold text-textMuted uppercase tracking-wider mb-2">Email</label>
+                    {/* Changed label from Email to Username */}
+                    <label className="block text-xs font-semibold text-textMuted uppercase tracking-wider mb-2">Username</label>
                     <input
-                      type="email"
-                      value={email}
-                      onChange={(e) => { setEmail(e.target.value); setError(''); }}
+                      type="text" // Changed from email to text
+                      value={username} // Bound to username state
+                      onChange={(e) => { setUsername(e.target.value); setError(''); }} // Updates username state
                       className="w-full bg-surfaceElevated/50 border border-border rounded-xl px-4 py-3 text-textMain placeholder:text-textMuted/50 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-all"
-                      placeholder="Enter your email"
-                      autoComplete="email"
+                      placeholder="Enter username"
+                      autoComplete="username"
                       autoFocus
                     />
                   </div>
@@ -250,7 +253,7 @@ export const UserLogin: React.FC<UserLoginProps> = ({ onOpenAdmin }) => {
                     </div>
                   )}
 
-                  <Button type="submit" disabled={!email || !password || isLoading}
+                  <Button type="submit" disabled={!username || !password || isLoading}
                     className="w-full py-3.5 text-base font-semibold shadow-lg shadow-primary/20 hover:shadow-primary/30 transition-shadow">
                     {isLoading ? (
                       <div className="flex items-center gap-2">
