@@ -3,7 +3,7 @@ import {
   LayoutDashboard, 
   LineChart, 
   Wallet, 
-  Trophy,
+  Newspaper,
   Shield,
   Search
 } from 'lucide-react';
@@ -20,7 +20,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onOpe
     { icon: LayoutDashboard, label: 'Overview' },
     { icon: LineChart, label: 'Markets' },
     { icon: Wallet, label: 'Portfolio' },
-    { icon: Trophy, label: 'Leaderboard' },
+    { icon: Newspaper, label: 'News Events' },
   ];
 
   return (

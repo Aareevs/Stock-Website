@@ -3,14 +3,15 @@ import { DashboardLayout } from './components/dashboard/DashboardLayout';
 import { UserLogin } from './components/auth/UserLogin';
 import { AdminLogin } from './components/admin/AdminLogin';
 import { AdminDashboard } from './components/admin/AdminDashboard';
-import { ViewState, User, MarketItem } from './types';
+import { ViewState, User, MarketItem, NewsEvent } from './types';
 import { INITIAL_MARKET_ITEMS } from './constants';
 import { generateUsers } from './data/users';
-import { tickAllPrices } from './engine/priceEngine';
+import { tickAllPrices, applyNewsEvent } from './engine/priceEngine';
 
 const STORAGE_KEY = 'novatrade_users';
 const MARKET_KEY = 'novatrade_market';
 const LOGGED_IN_KEY = 'novatrade_logged_in';
+const NEWS_KEY = 'novatrade_news';
 
 const App: React.FC = () => {
   const [view, setView] = useState<ViewState>(() => {
@@ -36,6 +37,12 @@ const App: React.FC = () => {
     return localStorage.getItem(LOGGED_IN_KEY);
   });
 
+  const [newsEvents, setNewsEvents] = useState<NewsEvent[]>(() => {
+    const saved = localStorage.getItem(NEWS_KEY);
+    if (saved) return JSON.parse(saved);
+    return [];
+  });
+
   // Save users to localStorage whenever they change
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(users));
@@ -45,6 +52,11 @@ const App: React.FC = () => {
   useEffect(() => {
     localStorage.setItem(MARKET_KEY, JSON.stringify(marketItems));
   }, [marketItems]);
+
+  // Save news events to localStorage
+  useEffect(() => {
+    localStorage.setItem(NEWS_KEY, JSON.stringify(newsEvents));
+  }, [newsEvents]);
 
   // 5-second price tick
   useEffect(() => {
@@ -73,6 +85,27 @@ const App: React.FC = () => {
     setUsers(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : u));
   };
 
+  const handleResetSimulation = () => {
+    // Clear all localStorage
+    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(MARKET_KEY);
+    localStorage.removeItem(LOGGED_IN_KEY);
+    localStorage.removeItem(NEWS_KEY);
+
+    // Regenerate fresh state
+    const freshUsers = generateUsers();
+    setUsers(freshUsers);
+    setMarketItems(INITIAL_MARKET_ITEMS);
+    setNewsEvents([]);
+    setLoggedInUserId(null);
+    setView(ViewState.DASHBOARD);
+  };
+
+  const handleTriggerNewsEvent = (event: NewsEvent) => {
+    setMarketItems(prev => applyNewsEvent(prev, event));
+    setNewsEvents(prev => [event, ...prev]);
+  };
+
   const currentUser = users.find(u => u.id === loggedInUserId) || null;
 
   // Show login page if no user is logged in and not in admin flow
@@ -93,6 +126,7 @@ const App: React.FC = () => {
           currentUser={currentUser!}
           users={users}
           marketItems={marketItems}
+          newsEvents={newsEvents}
           onUpdateUser={handleUpdateUser}
           onLogout={handleUserLogout}
           onOpenAdmin={() => setView(ViewState.ADMIN_LOGIN)}
@@ -110,7 +144,10 @@ const App: React.FC = () => {
         <AdminDashboard
           users={users}
           marketItems={marketItems}
+          newsEvents={newsEvents}
           onBack={() => setView(ViewState.DASHBOARD)}
+          onResetSimulation={handleResetSimulation}
+          onTriggerNewsEvent={handleTriggerNewsEvent}
         />
       )}
     </>

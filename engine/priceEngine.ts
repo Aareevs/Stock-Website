@@ -1,4 +1,4 @@
-import { MarketItem, StockDataPoint } from '../types';
+import { MarketItem, StockDataPoint, NewsEvent } from '../types';
 
 // Generate initial price history for a stock
 export const generatePriceHistory = (
@@ -63,3 +63,51 @@ export const tickPrice = (item: MarketItem): MarketItem => {
 export const tickAllPrices = (items: MarketItem[]): MarketItem[] => {
   return items.map(tickPrice);
 };
+
+// Apply a news event — immediately shock prices and flip sentiments
+export const applyNewsEvent = (items: MarketItem[], event: NewsEvent): MarketItem[] => {
+  return items.map(item => {
+    if (item.symbol === event.crashCompany) {
+      const factor = 1 + event.crashPercent / 100; // crashPercent is negative
+      const newPrice = parseFloat((item.price * factor).toFixed(2));
+      const newHistory = [
+        ...item.priceHistory.slice(-199),
+        {
+          time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+          value: newPrice,
+        },
+      ];
+      const firstPrice = newHistory[0]?.value || item.price;
+      return {
+        ...item,
+        price: newPrice,
+        change: parseFloat((((newPrice - firstPrice) / firstPrice) * 100).toFixed(2)),
+        sentiment: 'Bearish' as const,
+        priceHistory: newHistory,
+      };
+    }
+
+    if (event.boostCompanies.includes(item.symbol)) {
+      const factor = 1 + event.boostPercent / 100; // boostPercent is positive
+      const newPrice = parseFloat((item.price * factor).toFixed(2));
+      const newHistory = [
+        ...item.priceHistory.slice(-199),
+        {
+          time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+          value: newPrice,
+        },
+      ];
+      const firstPrice = newHistory[0]?.value || item.price;
+      return {
+        ...item,
+        price: newPrice,
+        change: parseFloat((((newPrice - firstPrice) / firstPrice) * 100).toFixed(2)),
+        sentiment: 'Bullish' as const,
+        priceHistory: newHistory,
+      };
+    }
+
+    return item;
+  });
+};
+

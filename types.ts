@@ -51,6 +51,16 @@ export interface User {
   transactions: Transaction[];
 }
 
+export interface NewsEvent {
+  id: string;
+  headline: string;
+  crashCompany: string;
+  crashPercent: number;
+  boostCompanies: string[];
+  boostPercent: number;
+  timestamp: number;
+}
+
 export enum ViewState {
   DASHBOARD = 'DASHBOARD',
   ADMIN_LOGIN = 'ADMIN_LOGIN',
