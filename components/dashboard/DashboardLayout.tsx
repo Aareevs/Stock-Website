@@ -6,36 +6,48 @@ import { METRICS, SENTIMENT_DATA, generateChartData } from '../../constants';
 import { ArrowUpRight, ArrowDownRight, Newspaper, LogIn, LogOut as LogOutIcon, User as UserIcon, History, TrendingUp, TrendingDown, Zap, Trophy, X, AlertTriangle, Clock } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { TradeModal } from './TradeModal';
-import { MarketItem, PortfolioItem, User, Transaction, NewsEvent } from '../../types';
 import { StockDetailChart } from './StockDetailChart';
+import type { Profile } from '../auth/AuthProvider';
+import type { MarketItem } from '../../hooks/useMarket';
+import type { NewsEvent } from '../../hooks/useNews';
+import type { PortfolioItem, Transaction } from '../../hooks/usePortfolio';
 
 interface DashboardLayoutProps {
-  currentUser: User | null;
-  users: User[];
+  profile: Profile;
   marketItems: MarketItem[];
   newsEvents: NewsEvent[];
-  onUpdateUser: (user: User) => void;
-  onLoginUser: (userId: string) => void;
+  portfolio: PortfolioItem[];
+  transactions: Transaction[];
+  onExecuteTrade: (
+    userId: string,
+    symbol: string,
+    assetName: string,
+    type: 'BUY' | 'SELL',
+    quantity: number,
+    price: number,
+    currentBalance: number,
+    purchasePrice?: number
+  ) => Promise<{ error: string | null }>;
   onLogout: () => void;
   onOpenAdmin: () => void;
+  isAdmin: boolean;
 }
 
 export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
-  currentUser,
-  users,
+  profile,
   marketItems,
   newsEvents,
-  onUpdateUser,
-  onLoginUser,
+  portfolio,
+  transactions,
+  onExecuteTrade,
   onLogout,
   onOpenAdmin,
+  isAdmin,
 }) => {
   const [activeTab, setActiveTab] = useState('Overview');
   const [tradeModalOpen, setTradeModalOpen] = useState(false);
   const [selectedAsset, setSelectedAsset] = useState<MarketItem | null>(null);
   const [selectedStock, setSelectedStock] = useState<MarketItem | null>(null);
-  const [loginDropdown, setLoginDropdown] = useState(false);
-  const [loginSearch, setLoginSearch] = useState('');
   const [newsToast, setNewsToast] = useState<NewsEvent | null>(null);
 
   // Track previous news event count to detect new flashes
@@ -54,113 +66,50 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
     prevNewsCountRef.current = newsEvents.length;
   }, [newsEvents]);
 
-  const balance = currentUser?.cashBalance ?? 0;
-  const portfolio = currentUser?.portfolio ?? [];
-  const transactions = currentUser?.transactions ?? [];
+  const balance = profile.cash_balance;
 
   const handleOpenTrade = (asset: MarketItem) => {
-    if (!currentUser) {
-      setLoginDropdown(true);
-      return;
-    }
     setSelectedAsset(asset);
     setTradeModalOpen(true);
   };
 
-  const handleConfirmTrade = (type: 'buy' | 'sell', quantity: number) => {
-    if (!selectedAsset || !currentUser) return;
+  const handleConfirmTrade = async (type: 'buy' | 'sell', quantity: number) => {
+    if (!selectedAsset) return;
 
-    const totalCost = quantity * selectedAsset.price;
-    let updatedUser = { ...currentUser };
+    const existing = portfolio.find(p => p.symbol === selectedAsset.symbol);
+    const result = await onExecuteTrade(
+      profile.id,
+      selectedAsset.symbol,
+      selectedAsset.name,
+      type === 'buy' ? 'BUY' : 'SELL',
+      quantity,
+      selectedAsset.price,
+      balance,
+      existing?.avg_price
+    );
 
-    if (type === 'buy') {
-      if (updatedUser.cashBalance >= totalCost) {
-        updatedUser.cashBalance -= totalCost;
-        const existing = updatedUser.portfolio.find(p => p.symbol === selectedAsset.symbol);
-        if (existing) {
-          const newTotal = existing.amount + quantity;
-          const newAvg = ((existing.avgPrice * existing.amount) + totalCost) / newTotal;
-          updatedUser.portfolio = updatedUser.portfolio.map(p =>
-            p.symbol === selectedAsset.symbol
-              ? { ...p, amount: newTotal, avgPrice: newAvg }
-              : p
-          );
-        } else {
-          updatedUser.portfolio = [
-            ...updatedUser.portfolio,
-            { asset: selectedAsset.name, symbol: selectedAsset.symbol, amount: quantity, avgPrice: selectedAsset.price },
-          ];
-        }
-
-        const tx: Transaction = {
-          id: `tx-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-          symbol: selectedAsset.symbol,
-          assetName: selectedAsset.name,
-          type: 'BUY',
-          quantity,
-          price: selectedAsset.price,
-          timestamp: Date.now(),
-        };
-        updatedUser.transactions = [tx, ...updatedUser.transactions];
-      }
-    } else {
-      const existing = updatedUser.portfolio.find(p => p.symbol === selectedAsset.symbol);
-      if (existing && existing.amount >= quantity) {
-        updatedUser.cashBalance += totalCost;
-        const profitLoss = (selectedAsset.price - existing.avgPrice) * quantity;
-
-        const newAmount = existing.amount - quantity;
-        if (newAmount <= 0) {
-          updatedUser.portfolio = updatedUser.portfolio.filter(p => p.symbol !== selectedAsset.symbol);
-        } else {
-          updatedUser.portfolio = updatedUser.portfolio.map(p =>
-            p.symbol === selectedAsset.symbol ? { ...p, amount: newAmount } : p
-          );
-        }
-
-        const tx: Transaction = {
-          id: `tx-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-          symbol: selectedAsset.symbol,
-          assetName: selectedAsset.name,
-          type: 'SELL',
-          quantity,
-          price: selectedAsset.price,
-          purchasePrice: existing.avgPrice,
-          timestamp: Date.now(),
-          profitLoss,
-        };
-        updatedUser.transactions = [tx, ...updatedUser.transactions];
-      }
+    if (!result.error) {
+      setTradeModalOpen(false);
     }
-
-    onUpdateUser(updatedUser);
-    setTradeModalOpen(false);
   };
 
-  // Calculate leaderboard
-  const leaderboard = users.map(user => {
-    const stockValue = user.portfolio.reduce((acc, item) => {
-      const currentPrice = marketItems.find(m => m.symbol === item.symbol)?.price || 0;
-      return acc + (item.amount * currentPrice);
-    }, 0);
-    return {
-      ...user,
-      stockValue,
-      totalNetWorth: user.cashBalance + stockValue,
-    };
-  }).sort((a, b) => b.totalNetWorth - a.totalNetWorth);
+  // Portfolio value
+  const totalPortfolioValueCalc = portfolio.reduce((acc, item) => {
+    const currentPrice = marketItems.find(m => m.symbol === item.symbol)?.price || 0;
+    return acc + (item.amount * currentPrice);
+  }, 0);
 
   // If viewing a stock detail chart
   if (selectedStock) {
     return (
       <div className="flex min-h-screen bg-background text-textMain">
-        <Sidebar activeTab={activeTab} setActiveTab={(tab) => { setSelectedStock(null); setActiveTab(tab); }} onOpenAdmin={onOpenAdmin} currentUserName={currentUser?.displayName} />
+        <Sidebar activeTab={activeTab} setActiveTab={(tab) => { setSelectedStock(null); setActiveTab(tab); }} onOpenAdmin={onOpenAdmin} currentUserName={profile.display_name} />
         <main className="flex-1 p-4 md:p-8 overflow-y-auto max-h-screen">
           <StockDetailChart
             stock={selectedStock}
             onBack={() => setSelectedStock(null)}
             ownedQty={portfolio.find(p => p.symbol === selectedStock.symbol)?.amount || 0}
-            avgPrice={portfolio.find(p => p.symbol === selectedStock.symbol)?.avgPrice || 0}
+            avgPrice={portfolio.find(p => p.symbol === selectedStock.symbol)?.avg_price || 0}
             onTrade={() => handleOpenTrade(selectedStock)}
           />
         </main>
@@ -168,50 +117,12 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
     );
   }
 
-  const renderLoginSelector = () => (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={() => setLoginDropdown(false)}>
-      <Card className="w-full max-w-md max-h-[80vh] flex flex-col p-6" padding="none" onClick={(e: React.MouseEvent) => e.stopPropagation()}>
-        <h2 className="text-xl font-bold text-textMain mb-4">Select Your Account</h2>
-        <input
-          type="text"
-          placeholder="Search by name..."
-          value={loginSearch}
-          onChange={(e) => setLoginSearch(e.target.value)}
-          className="w-full bg-surface border border-border rounded-lg px-4 py-2 mb-4 text-sm text-textMain placeholder:text-textMuted focus:outline-none focus:border-primary/50"
-        />
-        <div className="flex-1 overflow-y-auto space-y-1 min-h-0">
-          {users
-            .filter(u => u.displayName.toLowerCase().includes(loginSearch.toLowerCase()) || u.username.toLowerCase().includes(loginSearch.toLowerCase()))
-            .map(user => (
-              <button
-                key={user.id}
-                onClick={() => { onLoginUser(user.id); setLoginDropdown(false); }}
-                className={`w-full text-left px-4 py-3 rounded-lg transition-colors flex items-center justify-between ${
-                  currentUser?.id === user.id ? 'bg-primary/20 border border-primary/50' : 'hover:bg-surfaceElevated'
-                }`}
-              >
-                <div>
-                  <div className="font-semibold text-textMain text-sm">{user.displayName}</div>
-                  <div className="text-xs text-textMuted">@{user.username}</div>
-                </div>
-                <span className="text-xs text-textMuted font-mono">₹{user.cashBalance.toLocaleString('en-IN')}</span>
-              </button>
-            ))}
-        </div>
-        <div className="mt-4 pt-4 border-t border-border">
-          <Button variant="ghost" onClick={() => setLoginDropdown(false)} className="w-full">Cancel</Button>
-        </div>
-      </Card>
-    </div>
-  );
-
   const renderOverview = () => {
     const totalPortfolioValue = portfolio.reduce((acc, item) => {
       const currentPrice = marketItems.find(m => m.symbol === item.symbol)?.price || 0;
       return acc + (item.amount * currentPrice);
     }, 0);
     const totalNetWorth = balance + totalPortfolioValue;
-    const myRank = leaderboard.findIndex(u => u.id === currentUser?.id) + 1;
 
     return (
       <>
@@ -220,16 +131,9 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
           <div>
             <span className="text-sm text-textMuted block mb-1">Total Net Worth</span>
             <span className="text-4xl md:text-5xl font-bold text-textMain">
-              ₹{currentUser ? totalNetWorth.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}
+              ₹{totalNetWorth.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </span>
           </div>
-          {currentUser && (
-            <div className="flex gap-2 mb-2">
-              <span className="flex items-center gap-1 text-primary bg-primary/10 px-2 py-1 rounded text-sm font-semibold">
-                <Trophy className="w-3 h-3" /> Rank #{myRank}
-              </span>
-            </div>
-          )}
         </div>
 
         {/* Summary Cards */}
@@ -244,8 +148,8 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
           </Card>
           <Card className="bg-gradient-to-br from-surface to-surfaceElevated">
             <h3 className="text-sm text-textMuted mb-1">P&L</h3>
-            <div className={`text-2xl font-bold font-mono ${totalNetWorth - (currentUser?.startingCapital ?? 0) >= 0 ? 'text-primary' : 'text-negative'}`}>
-              {totalNetWorth - (currentUser?.startingCapital ?? 0) >= 0 ? '+' : ''}₹{(totalNetWorth - (currentUser?.startingCapital ?? 0)).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+            <div className={`text-2xl font-bold font-mono ${totalNetWorth - profile.starting_capital >= 0 ? 'text-primary' : 'text-negative'}`}>
+              {totalNetWorth - profile.starting_capital >= 0 ? '+' : ''}₹{(totalNetWorth - profile.starting_capital).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
             </div>
           </Card>
         </div>
@@ -389,19 +293,6 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
     }, 0);
     const totalNetWorth = balance + totalPortfolioValue;
 
-    if (!currentUser) {
-      return (
-        <Card className="text-center py-20">
-          <UserIcon className="w-12 h-12 mx-auto text-textMuted mb-4" />
-          <h3 className="text-xl font-bold mb-2">Select Your Account</h3>
-          <p className="text-textMuted mb-4">Choose your player account to view your portfolio</p>
-          <Button onClick={() => setLoginDropdown(true)}>
-            <LogIn className="w-4 h-4 mr-2" /> Select Account
-          </Button>
-        </Card>
-      );
-    }
-
     return (
       <div className="space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -459,7 +350,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
                     const marketData = marketItems.find(m => m.symbol === item.symbol);
                     const currentPrice = marketData?.price || 0;
                     const totalValue = item.amount * currentPrice;
-                    const pnl = (currentPrice - item.avgPrice) * item.amount;
+                    const pnl = (currentPrice - item.avg_price) * item.amount;
                     return (
                       <tr key={item.symbol} className="border-b border-border/50">
                         <td className="py-4 pl-2">
@@ -468,13 +359,13 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
                               {item.symbol[0]}
                             </div>
                             <div>
-                              <div className="font-semibold text-textMain">{item.asset}</div>
+                              <div className="font-semibold text-textMain">{marketItems.find(m => m.symbol === item.symbol)?.name || item.symbol}</div>
                               <div className="text-xs text-textMuted">{item.symbol}</div>
                             </div>
                           </div>
                         </td>
                         <td className="py-4 font-mono">{item.amount.toFixed(2)}</td>
-                        <td className="py-4 font-mono text-textMuted">₹{item.avgPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                        <td className="py-4 font-mono text-textMuted">₹{item.avg_price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                         <td className="py-4 font-mono">₹{currentPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                         <td className={`py-4 font-mono font-bold ${pnl >= 0 ? 'text-primary' : 'text-negative'}`}>
                           {pnl >= 0 ? '+' : ''}₹{pnl.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
@@ -524,13 +415,13 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
                       <td className="py-3 font-mono">{tx.quantity.toFixed(2)}</td>
                       <td className="py-3 font-mono">₹{tx.price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                       <td className="py-3 font-mono text-textMuted">
-                        {tx.purchasePrice ? `₹${tx.purchasePrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
+                        {tx.purchase_price ? `₹${tx.purchase_price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
                       </td>
-                      <td className={`py-3 font-mono font-bold ${(tx.profitLoss ?? 0) >= 0 ? 'text-primary' : 'text-negative'}`}>
-                        {tx.profitLoss !== undefined ? `${tx.profitLoss >= 0 ? '+' : ''}₹${tx.profitLoss.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
+                      <td className={`py-3 font-mono font-bold ${(tx.profit_loss ?? 0) >= 0 ? 'text-primary' : 'text-negative'}`}>
+                        {tx.profit_loss !== undefined ? `${tx.profit_loss >= 0 ? '+' : ''}₹${tx.profit_loss.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
                       </td>
                       <td className="py-3 text-right pr-2 text-textMuted text-xs">
-                        {new Date(tx.timestamp).toLocaleString('en-IN', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' })}
+                        {new Date(tx.created_at).toLocaleString('en-IN', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' })}
                       </td>
                     </tr>
                   ))}
@@ -562,7 +453,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
 
         {/* Active Flash — Featured Blog Post */}
         {activeEvent && (() => {
-          const crashCompany = marketItems.find(m => m.symbol === activeEvent.crashCompany);
+          const crashCompany = marketItems.find(m => m.symbol === activeEvent.crash_company);
           return (
             <div className="relative overflow-hidden rounded-2xl border border-orange-500/30 bg-gradient-to-br from-orange-500/5 via-surface to-red-500/5">
               <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-orange-500 via-red-500 to-orange-500" />
@@ -574,14 +465,14 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
                   </span>
                   <span className="flex items-center gap-1 text-xs text-textMuted">
                     <Clock className="w-3 h-3" />
-                    {new Date(activeEvent.timestamp).toLocaleString('en-IN', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' })}
+                    {new Date(activeEvent.created_at).toLocaleString('en-IN', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' })}
                   </span>
                 </div>
                 <h2 className="text-xl md:text-2xl font-bold text-orange-400 mb-3 leading-tight">{activeEvent.headline}</h2>
                 <p className="text-sm text-textMuted mb-5 leading-relaxed max-w-2xl">
-                  Markets are reacting to breaking developments. {crashCompany?.name || activeEvent.crashCompany} shares have plummeted
-                  by {Math.abs(activeEvent.crashPercent)}% as investors rush to exit positions.
-                  {activeEvent.boostCompanies.length > 0 && ` Meanwhile, competitors are seeing gains as capital flows into alternative stocks.`}
+                  Markets are reacting to breaking developments. {crashCompany?.name || activeEvent.crash_company} shares have plummeted
+                  by {Math.abs(activeEvent.crash_percent)}% as investors rush to exit positions.
+                  {activeEvent.boost_companies.length > 0 && ` Meanwhile, competitors are seeing gains as capital flows into alternative stocks.`}
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="flex items-center gap-3 p-3 bg-negative/5 rounded-xl border border-negative/20">
@@ -590,11 +481,11 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
                     </div>
                     <div>
                       <div className="text-xs text-textMuted">Crashing</div>
-                      <div className="font-bold text-negative">{crashCompany?.name || activeEvent.crashCompany}</div>
-                      <div className="text-xs font-mono text-negative">{activeEvent.crashPercent}%</div>
+                      <div className="font-bold text-negative">{crashCompany?.name || activeEvent.crash_company}</div>
+                      <div className="text-xs font-mono text-negative">{activeEvent.crash_percent}%</div>
                     </div>
                   </div>
-                  {activeEvent.boostCompanies.map(sym => {
+                  {activeEvent.boost_companies.map(sym => {
                     const company = marketItems.find(m => m.symbol === sym);
                     return (
                       <div key={sym} className="flex items-center gap-3 p-3 bg-primary/5 rounded-xl border border-primary/20">
@@ -604,7 +495,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
                         <div>
                           <div className="text-xs text-textMuted">Benefiting</div>
                           <div className="font-bold text-primary">{company?.name || sym}</div>
-                          <div className="text-xs font-mono text-primary">+{activeEvent.boostPercent}%</div>
+                          <div className="text-xs font-mono text-primary">+{activeEvent.boost_percent}%</div>
                         </div>
                       </div>
                     );
@@ -627,7 +518,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
             <h3 className="text-sm font-semibold text-textMuted uppercase tracking-wider mb-4">Previous Stories</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {pastEvents.map(event => {
-                const crashCompany = marketItems.find(m => m.symbol === event.crashCompany);
+                const crashCompany = marketItems.find(m => m.symbol === event.crash_company);
                 return (
                   <Card key={event.id} className="hover:border-border transition-colors" hoverEffect>
                     <div className="flex items-center gap-2 mb-3">
@@ -636,30 +527,30 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
                       </div>
                       <span className="text-[10px] text-textMuted uppercase tracking-wider font-semibold">Market Alert</span>
                       <span className="text-[10px] text-textMuted ml-auto">
-                        {new Date(event.timestamp).toLocaleString('en-IN', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' })}
+                        {new Date(event.created_at).toLocaleString('en-IN', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' })}
                       </span>
                     </div>
                     <h4 className="font-bold text-textMain text-sm mb-2 leading-snug">{event.headline}</h4>
                     <p className="text-xs text-textMuted mb-3 line-clamp-2">
-                      {crashCompany?.name || event.crashCompany} dropped {Math.abs(event.crashPercent)}%.
-                      {event.boostCompanies.length > 0 && ` ${event.boostCompanies.length} competitor(s) rose +${event.boostPercent}%.`}
+                      {crashCompany?.name || event.crash_company} dropped {Math.abs(event.crash_percent)}%.
+                      {event.boost_companies.length > 0 && ` ${event.boost_companies.length} competitor(s) rose +${event.boost_percent}%.`}
                     </p>
                     <div className="flex flex-wrap gap-1.5">
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-negative/10 text-negative rounded text-[10px] font-bold">
                         <TrendingDown className="w-2.5 h-2.5" />
-                        {crashCompany?.name || event.crashCompany} {event.crashPercent}%
+                        {crashCompany?.name || event.crash_company} {event.crash_percent}%
                       </span>
-                      {event.boostCompanies.slice(0, 2).map(sym => {
+                      {event.boost_companies.slice(0, 2).map(sym => {
                         const company = marketItems.find(m => m.symbol === sym);
                         return (
                           <span key={sym} className="inline-flex items-center gap-1 px-2 py-0.5 bg-primary/10 text-primary rounded text-[10px] font-bold">
                             <TrendingUp className="w-2.5 h-2.5" />
-                            {company?.name || sym} +{event.boostPercent}%
+                            {company?.name || sym} +{event.boost_percent}%
                           </span>
                         );
                       })}
-                      {event.boostCompanies.length > 2 && (
-                        <span className="text-[10px] text-textMuted">+{event.boostCompanies.length - 2} more</span>
+                      {event.boost_companies.length > 2 && (
+                        <span className="text-[10px] text-textMuted">Active for {Math.round((Date.now() - new Date(event.created_at || 0).getTime()) / 60000)} min</span>
                       )}
                     </div>
                   </Card>
@@ -674,7 +565,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
 
   return (
     <div className="flex min-h-screen bg-background text-textMain">
-      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} onOpenAdmin={onOpenAdmin} currentUserName={currentUser?.displayName} />
+      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} onOpenAdmin={onOpenAdmin} currentUserName={profile.display_name} />
 
       {tradeModalOpen && (
         <TradeModal
@@ -690,7 +581,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
 
       {/* News Flash Toast Notification */}
       {newsToast && (() => {
-        const crashCompany = marketItems.find(m => m.symbol === newsToast.crashCompany);
+        const crashCompany = marketItems.find(m => m.symbol === newsToast.crash_company);
         return (
           <div
             className="fixed top-4 right-4 z-[100] w-96 max-w-[calc(100vw-2rem)]"
@@ -715,14 +606,14 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
                 <div className="flex flex-wrap gap-1.5">
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-negative/10 text-negative rounded text-[10px] font-bold">
                     <TrendingDown className="w-2.5 h-2.5" />
-                    {crashCompany?.name || newsToast.crashCompany} {newsToast.crashPercent}%
+                    {crashCompany?.name || newsToast.crash_company} {newsToast.crash_percent}%
                   </span>
-                  {newsToast.boostCompanies.slice(0, 2).map(sym => {
+                  {newsToast.boost_companies.slice(0, 2).map(sym => {
                     const company = marketItems.find(m => m.symbol === sym);
                     return (
                       <span key={sym} className="inline-flex items-center gap-1 px-2 py-0.5 bg-primary/10 text-primary rounded text-[10px] font-bold">
                         <TrendingUp className="w-2.5 h-2.5" />
-                        {company?.name || sym} +{newsToast.boostPercent}%
+                        {company?.name || sym} +{newsToast.boost_percent}%
                       </span>
                     );
                   })}
@@ -739,27 +630,25 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
         );
       })()}
 
-      {loginDropdown && renderLoginSelector()}
 
       <main className="flex-1 p-4 md:p-8 overflow-y-auto max-h-screen">
         <header className="flex justify-between items-center mb-8">
           <div>
             <div className="flex items-center gap-3 mb-1">
               <div className="w-10 h-10 rounded-full bg-surfaceElevated border border-border flex items-center justify-center text-sm font-bold text-primary">
-                {currentUser ? currentUser.displayName.split(' ').map(n => n[0]).join('') : '?'}
+              {profile.display_name.split(' ').map(n => n[0]).join('')}
               </div>
               <div>
                 <h1 className="text-xl md:text-2xl font-bold text-textMain leading-none">
-                  {currentUser ? currentUser.displayName : 'VSX: Buy or Bail'}
+                  {profile.display_name}
                 </h1>
                 <span className="text-xs md:text-sm text-textMuted">
-                  {currentUser ? `@${currentUser.username}` : 'Select an account to begin'}
+                  @{profile.username}
                 </span>
               </div>
             </div>
           </div>
           <div className="flex gap-3">
-            {currentUser ? (
               <>
                 <div className="flex items-center gap-2 bg-surfaceElevated px-3 py-1 rounded-lg border border-border">
                   <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
@@ -769,11 +658,6 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
                   <LogOutIcon className="w-4 h-4 mr-1" /> Logout
                 </Button>
               </>
-            ) : (
-              <Button onClick={() => setLoginDropdown(true)}>
-                <LogIn className="w-4 h-4 mr-1" /> Select Account
-              </Button>
-            )}
           </div>
         </header>
 
@@ -781,7 +665,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
         {(() => {
           const activeEvent = newsEvents.find(e => e.active);
           if (!activeEvent) return null;
-          const crashCompany = marketItems.find(m => m.symbol === activeEvent.crashCompany);
+          const crashCompany = marketItems.find(m => m.symbol === activeEvent.crash_company);
           return (
             <div className="mb-6 relative overflow-hidden rounded-xl border border-orange-500/30 bg-gradient-to-r from-orange-500/10 via-red-500/5 to-orange-500/10">
               <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-orange-500 via-red-500 to-orange-500 animate-pulse" />
@@ -797,14 +681,14 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
                 <div className="flex flex-wrap gap-2">
                   <span className="inline-flex items-center gap-1 px-2 py-1 bg-negative/10 text-negative rounded-lg text-xs font-semibold">
                     <TrendingDown className="w-3 h-3" />
-                    {crashCompany?.name || activeEvent.crashCompany} {activeEvent.crashPercent}%
+                    {crashCompany?.name || activeEvent.crash_company} {activeEvent.crash_percent}%
                   </span>
-                  {activeEvent.boostCompanies.map(sym => {
+                  {activeEvent.boost_companies.map(sym => {
                     const company = marketItems.find(m => m.symbol === sym);
                     return (
                       <span key={sym} className="inline-flex items-center gap-1 px-2 py-1 bg-primary/10 text-primary rounded-lg text-xs font-semibold">
                         <TrendingUp className="w-3 h-3" />
-                        {company?.name || sym} +{activeEvent.boostPercent}%
+                        {company?.name || sym} +{activeEvent.boost_percent}%
                       </span>
                     );
                   })}
@@ -874,7 +758,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
                         <div className="min-w-0">
                           <div className="text-xs font-semibold text-textMain truncate">{event.headline}</div>
                           <div className="text-[10px] text-textMuted">
-                            {new Date(event.timestamp).toLocaleString('en-IN', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' })}
+                            {new Date(event.created_at).toLocaleString('en-IN', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' })}
                           </div>
                         </div>
                       </div>
