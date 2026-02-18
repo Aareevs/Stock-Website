@@ -20,9 +20,9 @@ export const StockDetailChart: React.FC<StockDetailChartProps> = ({
   avgPrice,
   onTrade,
 }) => {
-  const isPositive = stock.change >= 0;
-  const currentValue = ownedQty * stock.price;
-  const pnl = ownedQty > 0 ? (stock.price - avgPrice) * ownedQty : 0;
+  const isPositive = (stock.change ?? 0) >= 0;
+  const currentValue = ownedQty * (stock.price ?? 0);
+  const pnl = ownedQty > 0 ? ((stock.price ?? 0) - avgPrice) * ownedQty : 0;
 
   return (
     <div className="space-y-6">
@@ -40,11 +40,11 @@ export const StockDetailChart: React.FC<StockDetailChartProps> = ({
         </div>
         <div className="text-right">
           <div className="text-3xl font-bold font-mono text-textMain">
-            ₹{stock.price.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            ₹{(stock.price ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
           <div className={`flex items-center justify-end gap-1 text-sm font-semibold ${isPositive ? 'text-primary' : 'text-negative'}`}>
             {isPositive ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
-            {isPositive ? '+' : ''}{stock.change.toFixed(2)}%
+            {isPositive ? '+' : ''}{(stock.change ?? 0).toFixed(2)}%
           </div>
         </div>
       </div>
@@ -58,15 +58,15 @@ export const StockDetailChart: React.FC<StockDetailChartProps> = ({
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card>
           <div className="text-xs text-textMuted mb-1">Open</div>
-          <div className="font-mono font-bold">₹{stock.priceHistory[0]?.value.toLocaleString('en-IN', { minimumFractionDigits: 2 }) || '—'}</div>
+          <div className="font-mono font-bold">{(stock.priceHistory?.length ?? 0) > 0 ? `₹${stock.priceHistory[0].value.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}</div>
         </Card>
         <Card>
           <div className="text-xs text-textMuted mb-1">High</div>
-          <div className="font-mono font-bold text-primary">₹{Math.max(...stock.priceHistory.map(p => p.value)).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+          <div className="font-mono font-bold text-primary">{(stock.priceHistory?.length ?? 0) > 0 ? `₹${Math.max(...stock.priceHistory.map(p => p.value)).toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}</div>
         </Card>
         <Card>
           <div className="text-xs text-textMuted mb-1">Low</div>
-          <div className="font-mono font-bold text-negative">₹{Math.min(...stock.priceHistory.map(p => p.value)).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+          <div className="font-mono font-bold text-negative">{(stock.priceHistory?.length ?? 0) > 0 ? `₹${Math.min(...stock.priceHistory.map(p => p.value)).toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}</div>
         </Card>
         <Card>
           <div className="text-xs text-textMuted mb-1">Sentiment</div>

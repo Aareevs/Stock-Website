@@ -192,10 +192,10 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
                         </div>
                       </div>
                     </td>
-                    <td className="py-4 font-mono font-medium">₹{item.price.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                    <td className="py-4 font-mono font-medium">₹{(item.price ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                     <td className="py-4">
-                      <span className={`flex items-center gap-1 ${item.change >= 0 ? 'text-primary' : 'text-negative'}`}>
-                        {item.change >= 0 ? '+' : ''}{item.change.toFixed(2)}%
+                      <span className={`flex items-center gap-1 ${(item.change ?? 0) >= 0 ? 'text-primary' : 'text-negative'}`}>
+                        {(item.change ?? 0) >= 0 ? '+' : ''}{(item.change ?? 0).toFixed(2)}%
                       </span>
                     </td>
                     <td className="py-4 pr-2 w-32">
@@ -265,14 +265,14 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
                         </div>
                       </div>
                     </td>
-                    <td className="py-4 font-mono font-medium">₹{item.price.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                    <td className="py-4 font-mono font-medium">₹{(item.price ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                     <td className="py-4">
-                      <span className={`flex items-center gap-1 ${item.change >= 0 ? 'text-primary' : 'text-negative'}`}>
-                        {item.change >= 0 ? '+' : ''}{item.change.toFixed(2)}%
+                      <span className={`flex items-center gap-1 ${(item.change ?? 0) >= 0 ? 'text-primary' : 'text-negative'}`}>
+                        {(item.change ?? 0) >= 0 ? '+' : ''}{(item.change ?? 0).toFixed(2)}%
                       </span>
                     </td>
                     <td className="py-4 font-mono text-textMuted">
-                      {owned ? `₹${owned.avgPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
+                      {owned ? `₹${(owned.avg_price ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
                     </td>
                     <td className="py-4 w-32">
                       <MiniSparkline data={(item.priceHistory || []).slice(-20)} color={item.change >= 0 ? '#1ED3A6' : '#EF4444'} />
@@ -369,7 +369,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
                           </div>
                         </td>
                         <td className="py-4 font-mono">{item.amount.toFixed(2)}</td>
-                        <td className="py-4 font-mono text-textMuted">₹{item.avg_price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                        <td className="py-4 font-mono text-textMuted">₹{(item.avg_price ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                         <td className="py-4 font-mono">₹{currentPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                         <td className={`py-4 font-mono font-bold ${pnl >= 0 ? 'text-primary' : 'text-negative'}`}>
                           {pnl >= 0 ? '+' : ''}₹{pnl.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
