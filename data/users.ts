@@ -1,6 +1,6 @@
 import { User } from '../types';
 
-const STARTING_CAPITAL = 10_00_00_000; // ₹10 Crore
+const STARTING_CAPITAL = 100000; // ₹1 Lakh
 
 const FIRST_NAMES = [
   'Aarav', 'Vivaan', 'Aditya', 'Vihaan', 'Arjun',
@@ -46,5 +46,5 @@ export const ADMIN_CREDENTIALS = {
   password: 'admin123',
 };
 
-export const STARTING_CAPITAL_DISPLAY = '₹10 Cr';
+export const STARTING_CAPITAL_DISPLAY = '₹1 Lakh';
 export { STARTING_CAPITAL };

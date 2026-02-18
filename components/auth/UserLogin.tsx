@@ -113,7 +113,7 @@ export const UserLogin: React.FC<UserLoginProps> = ({ onOpenAdmin }) => {
         <div className="max-w-md text-center space-y-6 px-12">
           <img src="/vsx-logo.png" alt="VSX: Buy or Bail" className="h-56 mx-auto drop-shadow-2xl" />
           <p className="text-lg text-textMuted leading-relaxed">
-            Compete with 40 players in the ultimate stock trading showdown. Start with ₹10 Cr — buy smart or bail fast.
+            Compete with 40 players in the ultimate stock trading showdown. Start with ₹1 Lakh — buy smart or bail fast.
           </p>
 
           <div className="grid grid-cols-3 gap-4 mt-8">
@@ -126,7 +126,7 @@ export const UserLogin: React.FC<UserLoginProps> = ({ onOpenAdmin }) => {
               <div className="text-xs text-textMuted mt-1">Stocks</div>
             </div>
             <div className="bg-surface/50 backdrop-blur border border-primary/20 rounded-xl p-4 shadow-lg shadow-primary/5">
-              <div className="text-2xl font-bold text-primary">₹10Cr</div>
+              <div className="text-2xl font-bold text-primary">₹1L</div>
               <div className="text-xs text-textMuted mt-1">Starting Capital</div>
             </div>
           </div>

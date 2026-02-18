@@ -7,6 +7,9 @@ import { useAuth } from './components/auth/AuthProvider';
 import { useMarket } from './hooks/useMarket';
 import { useNews } from './hooks/useNews';
 import { usePortfolio } from './hooks/usePortfolio';
+import { supabase } from './lib/supabaseClient';
+
+const STARTING_CAPITAL = 100000; // ₹1 Lakh
 
 type View = 'dashboard' | 'admin_login' | 'admin_dashboard';
 
@@ -63,6 +66,65 @@ const App: React.FC = () => {
       return { error: null };
     };
 
+    const handleResetAuction = async () => {
+      try {
+        // Reset all participant cash balances
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .update({ cash_balance: STARTING_CAPITAL, starting_capital: STARTING_CAPITAL })
+          .eq('role', 'participant');
+        if (profileError) throw profileError;
+
+        // Clear all portfolios
+        const { error: portfolioError } = await supabase
+          .from('portfolios')
+          .delete()
+          .neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all
+        if (portfolioError) throw portfolioError;
+
+        // Clear all transactions
+        const { error: txError } = await supabase
+          .from('transactions')
+          .delete()
+          .neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all
+        if (txError) throw txError;
+
+        // Deactivate all news events
+        const { error: newsError } = await supabase
+          .from('news_events')
+          .update({ active: false })
+          .eq('active', true);
+        if (newsError) throw newsError;
+
+        // Reset market prices
+        const initialPrices: Record<string, number> = {
+          'RADIANCE': 2450.00,
+          'TCS': 3480.00,
+          'HDFCBANK': 1650.00,
+          'INFY': 1420.00,
+          'ITC': 440.00,
+          'SBIN': 620.00,
+          'BHARTIARTL': 1180.00,
+          'HINDUNILVR': 2520.00,
+          'KOTAKBANK': 1780.00,
+          'LT': 3200.00,
+          'AXISBANK': 1050.00,
+          'TATAMOTORS': 680.00,
+        };
+
+        for (const [symbol, price] of Object.entries(initialPrices)) {
+          await supabase
+            .from('market_items')
+            .update({ price, change: 0, sentiment: 'Neutral', price_history: [] })
+            .eq('symbol', symbol);
+        }
+
+        return { error: null };
+      } catch (err: any) {
+        return { error: err.message || 'Failed to reset auction' };
+      }
+    };
+
     return (
       <AdminDashboard
         profile={profile}
@@ -71,6 +133,7 @@ const App: React.FC = () => {
         onBack={() => setView('dashboard')}
         onTriggerNews={handleTriggerNews}
         onStopNews={handleStopNews}
+        onResetAuction={handleResetAuction}
       />
     );
   }

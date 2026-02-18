@@ -9,8 +9,8 @@ create table if not exists profiles (
   username text unique not null,
   display_name text not null,
   role text not null default 'participant' check (role in ('admin', 'participant')),
-  cash_balance numeric not null default 100000000,
-  starting_capital numeric not null default 100000000,
+  cash_balance numeric not null default 100000,
+  starting_capital numeric not null default 100000,
   created_at timestamptz default now()
 );
 

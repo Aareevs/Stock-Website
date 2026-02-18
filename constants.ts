@@ -45,7 +45,7 @@ export const METRICS = [
   {
     id: '4',
     label: 'Avg Portfolio',
-    value: '₹10Cr',
+    value: '₹1L',
     change: 0.2,
     history: generateChartData(20, 1, 0.1),
   },

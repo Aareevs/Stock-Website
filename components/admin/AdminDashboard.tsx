@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Trophy, Users, BarChart2, Search, X, TrendingUp, TrendingDown, Newspaper, RotateCcw, Zap, AlertTriangle, ChevronDown, Check } from 'lucide-react';
+import { ArrowLeft, Trophy, Users, BarChart2, Search, X, TrendingUp, TrendingDown, Newspaper, RotateCcw, Zap, AlertTriangle, ChevronDown, Check, RefreshCw } from 'lucide-react';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { StockChart, MiniSparkline } from '../dashboard/Charts';
@@ -20,12 +20,15 @@ interface AdminDashboardProps {
     headline: string
   ) => Promise<{ error: string | null }>;
   onStopNews: (eventId: string) => Promise<{ error: string | null }>;
+  onResetAuction: () => Promise<{ error: string | null }>;
 }
 
-export const AdminDashboard: React.FC<AdminDashboardProps> = ({ profile, marketItems, newsEvents, onBack, onTriggerNews, onStopNews }) => {
+export const AdminDashboard: React.FC<AdminDashboardProps> = ({ profile, marketItems, newsEvents, onBack, onTriggerNews, onStopNews, onResetAuction }) => {
   const [activeView, setActiveView] = useState<'charts' | 'news'>('news');
   const [selectedChart, setSelectedChart] = useState<MarketItem | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [isResetting, setIsResetting] = useState(false);
+  const [resetConfirm, setResetConfirm] = useState(false);
 
   // News event form state
   const [crashSymbol, setCrashSymbol] = useState('');
@@ -69,6 +72,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ profile, marketI
     setBoostPercent(8);
   };
 
+  const handleResetAuction = async () => {
+    if (!resetConfirm) {
+      setResetConfirm(true);
+      return;
+    }
+    setIsResetting(true);
+    await onResetAuction();
+    setIsResetting(false);
+    setResetConfirm(false);
+  };
+
 
   return (
     <div className="min-h-screen bg-background text-textMain">
@@ -85,6 +99,42 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ profile, marketI
               <h1 className="text-2xl font-bold">VSX Admin</h1>
               <p className="text-sm text-textMuted">Competition Management Dashboard</p>
             </div>
+          </div>
+          
+          {/* Reset Auction Button */}
+          <div className="flex items-center gap-2">
+            {resetConfirm && (
+              <button 
+                onClick={() => setResetConfirm(false)}
+                className="px-3 py-2 text-sm text-textMuted hover:text-textMain transition-colors"
+              >
+                Cancel
+              </button>
+            )}
+            <Button
+              variant={resetConfirm ? 'primary' : 'ghost'}
+              size="sm"
+              onClick={handleResetAuction}
+              disabled={isResetting}
+              className={resetConfirm ? 'bg-red-500 hover:bg-red-600' : 'border border-red-500/30 text-red-400 hover:bg-red-500/10'}
+            >
+              {isResetting ? (
+                <>
+                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                  Resetting...
+                </>
+              ) : resetConfirm ? (
+                <>
+                  <AlertTriangle className="w-4 h-4 mr-2" />
+                  Confirm Reset
+                </>
+              ) : (
+                <>
+                  <RotateCcw className="w-4 h-4 mr-2" />
+                  Reset Auction
+                </>
+              )}
+            </Button>
           </div>
         </div>
 
