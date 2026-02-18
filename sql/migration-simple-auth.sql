@@ -54,12 +54,16 @@ DROP POLICY IF EXISTS "Users can read own transactions" ON transactions;
 DROP POLICY IF EXISTS "Users can insert transactions" ON transactions;
 DROP POLICY IF EXISTS "Anyone can read transactions" ON transactions;
 DROP POLICY IF EXISTS "Anyone can insert transactions" ON transactions;
+DROP POLICY IF EXISTS "Anyone can delete transactions" ON transactions;
 
 CREATE POLICY "Anyone can read transactions"
   ON transactions FOR SELECT USING (true);
 
 CREATE POLICY "Anyone can insert transactions"
   ON transactions FOR INSERT WITH CHECK (true);
+
+CREATE POLICY "Anyone can delete transactions"
+  ON transactions FOR DELETE USING (true);
 
 -- MARKET_ITEMS
 DROP POLICY IF EXISTS "Anyone can read market" ON market_items;

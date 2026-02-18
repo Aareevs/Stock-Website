@@ -75,25 +75,25 @@ const App: React.FC = () => {
           .eq('role', 'participant');
         if (profileError) throw profileError;
 
-        // Clear all portfolios (gt '' matches all non-null ids)
+        // Clear all portfolios - use neq to match all rows
         const { error: portfolioError } = await supabase
           .from('portfolios')
           .delete()
-          .gt('id', '00000000-0000-0000-0000-000000000000');
+          .neq('id', '00000000-0000-0000-0000-000000000000');
         if (portfolioError) throw portfolioError;
 
-        // Clear all transactions
+        // Clear all transactions - use neq to match all rows
         const { error: txError } = await supabase
           .from('transactions')
           .delete()
-          .gt('id', '00000000-0000-0000-0000-000000000000');
+          .neq('id', '00000000-0000-0000-0000-000000000000');
         if (txError) throw txError;
 
-        // DELETE all news events (not just deactivate)
+        // DELETE all news events - use neq to match all rows
         const { error: newsError } = await supabase
           .from('news_events')
           .delete()
-          .gt('id', '00000000-0000-0000-0000-000000000000');
+          .neq('id', '00000000-0000-0000-0000-000000000000');
         if (newsError) throw newsError;
 
         // Reset market prices
