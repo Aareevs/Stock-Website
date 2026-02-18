@@ -9,7 +9,15 @@ export interface MarketItem {
   sentiment: 'Bullish' | 'Bearish' | 'Neutral';
   icon: string;
   price_history: { time: string; value: number }[];
+  priceHistory: { time: string; value: number }[]; // Alias for compatibility
 }
+
+// Transform database row to include both price_history and priceHistory
+const transformMarketItem = (item: any): MarketItem => ({
+  ...item,
+  price_history: item.price_history || [],
+  priceHistory: item.price_history || [],
+});
 
 export function useMarket() {
   const [marketItems, setMarketItems] = useState<MarketItem[]>([]);
@@ -24,7 +32,7 @@ export function useMarket() {
           .select('*')
           .order('symbol');
         if (error) throw error;
-        if (data) setMarketItems(data as MarketItem[]);
+        if (data) setMarketItems(data.map(transformMarketItem));
       } catch (err) {
         console.error('Error fetching market items:', err);
       } finally {
@@ -42,7 +50,7 @@ export function useMarket() {
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'market_items' },
         (payload) => {
-          const updated = payload.new as MarketItem;
+          const updated = transformMarketItem(payload.new);
           setMarketItems(prev =>
             prev.map(item => item.symbol === updated.symbol ? updated : item)
           );
@@ -58,8 +66,9 @@ export function useMarket() {
         .order('symbol');
       if (data) {
         setMarketItems(prev => {
-          const isDifferent = JSON.stringify(prev) !== JSON.stringify(data);
-          return isDifferent ? (data as MarketItem[]) : prev;
+          const transformed = data.map(transformMarketItem);
+          const isDifferent = JSON.stringify(prev) !== JSON.stringify(transformed);
+          return isDifferent ? transformed : prev;
         });
       }
     }, 5000);

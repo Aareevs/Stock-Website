@@ -170,7 +170,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ profile, marketI
                         </div>
                       </div>
                     </div>
-                    <MiniSparkline data={item.priceHistory.slice(-30)} color={item.change >= 0 ? '#1ED3A6' : '#EF4444'} />
+                    <MiniSparkline data={(item.priceHistory || []).slice(-30)} color={item.change >= 0 ? '#1ED3A6' : '#EF4444'} />
                   </Card>
                 ))}
               </div>

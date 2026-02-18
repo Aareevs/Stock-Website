@@ -37,7 +37,7 @@ export const tickPrice = (item: MarketItem): MarketItem => {
   const newPrice = parseFloat((item.price * (1 + changePercent)).toFixed(2));
 
   const newHistory = [
-    ...item.priceHistory.slice(-199),
+    ...(item.priceHistory || []).slice(-199),
     {
       time: new Date().toLocaleTimeString('en-US', {
         hour: '2-digit',
@@ -71,7 +71,7 @@ export const applyNewsEvent = (items: MarketItem[], event: NewsEvent): MarketIte
       const factor = 1 + event.crashPercent / 100; // crashPercent is negative
       const newPrice = parseFloat((item.price * factor).toFixed(2));
       const newHistory = [
-        ...item.priceHistory.slice(-199),
+        ...(item.priceHistory || []).slice(-199),
         {
           time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
           value: newPrice,
@@ -91,7 +91,7 @@ export const applyNewsEvent = (items: MarketItem[], event: NewsEvent): MarketIte
       const factor = 1 + event.boostPercent / 100; // boostPercent is positive
       const newPrice = parseFloat((item.price * factor).toFixed(2));
       const newHistory = [
-        ...item.priceHistory.slice(-199),
+        ...(item.priceHistory || []).slice(-199),
         {
           time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
           value: newPrice,

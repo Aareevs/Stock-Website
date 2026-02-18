@@ -195,7 +195,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
                       </span>
                     </td>
                     <td className="py-4 pr-2 w-32">
-                      <MiniSparkline data={item.priceHistory.slice(-20)} color={item.change >= 0 ? '#1ED3A6' : '#EF4444'} />
+                      <MiniSparkline data={(item.priceHistory || []).slice(-20)} color={item.change >= 0 ? '#1ED3A6' : '#EF4444'} />
                     </td>
                   </tr>
                 ))}
@@ -271,7 +271,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
                       {owned ? `₹${owned.avgPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
                     </td>
                     <td className="py-4 w-32">
-                      <MiniSparkline data={item.priceHistory.slice(-20)} color={item.change >= 0 ? '#1ED3A6' : '#EF4444'} />
+                      <MiniSparkline data={(item.priceHistory || []).slice(-20)} color={item.change >= 0 ? '#1ED3A6' : '#EF4444'} />
                     </td>
                     <td className="py-4">
                       <Button size="sm" onClick={() => handleOpenTrade(item)} className="opacity-0 group-hover:opacity-100 transition-opacity">Trade</Button>
