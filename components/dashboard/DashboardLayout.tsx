@@ -68,7 +68,8 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
     prevNewsCountRef.current = newsEvents.length;
   }, [newsEvents]);
 
-  const balance = profile.cash_balance;
+  const balance = profile.cash_balance ?? 0;
+  const startingCapital = profile.starting_capital ?? 100000;
 
   const handleOpenTrade = (asset: MarketItem) => {
     setSelectedAsset(asset);
@@ -152,8 +153,8 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
           </Card>
           <Card className="bg-gradient-to-br from-surface to-surfaceElevated">
             <h3 className="text-sm text-textMuted mb-1">P&L</h3>
-            <div className={`text-2xl font-bold font-mono ${totalNetWorth - profile.starting_capital >= 0 ? 'text-primary' : 'text-negative'}`}>
-              {totalNetWorth - profile.starting_capital >= 0 ? '+' : ''}₹{(totalNetWorth - profile.starting_capital).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+            <div className={`text-2xl font-bold font-mono ${totalNetWorth - startingCapital >= 0 ? 'text-primary' : 'text-negative'}`}>
+              {totalNetWorth - startingCapital >= 0 ? '+' : ''}₹{(totalNetWorth - startingCapital).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
             </div>
           </Card>
         </div>
@@ -418,16 +419,16 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
                         </span>
                       </td>
                       <td className="py-3 font-semibold">{tx.symbol}</td>
-                      <td className="py-3 font-mono">{tx.quantity.toFixed(2)}</td>
-                      <td className="py-3 font-mono">₹{tx.price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                      <td className="py-3 font-mono">{(tx.quantity ?? 0).toFixed(2)}</td>
+                      <td className="py-3 font-mono">₹{(tx.price ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                       <td className="py-3 font-mono text-textMuted">
-                        {tx.purchase_price ? `₹${tx.purchase_price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
+                        {tx.purchase_price != null ? `₹${tx.purchase_price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
                       </td>
                       <td className={`py-3 font-mono font-bold ${(tx.profit_loss ?? 0) >= 0 ? 'text-primary' : 'text-negative'}`}>
-                        {tx.profit_loss !== undefined ? `${tx.profit_loss >= 0 ? '+' : ''}₹${tx.profit_loss.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
+                        {tx.profit_loss != null ? `${tx.profit_loss >= 0 ? '+' : ''}₹${tx.profit_loss.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
                       </td>
                       <td className="py-3 text-right pr-2 text-textMuted text-xs">
-                        {new Date(tx.created_at).toLocaleString('en-IN', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' })}
+                        {tx.created_at ? new Date(tx.created_at).toLocaleString('en-IN', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' }) : '—'}
                       </td>
                     </tr>
                   ))}
