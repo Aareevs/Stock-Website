@@ -21,10 +21,8 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLogin, onBack }) => {
     setError('');
     setIsLoading(true);
 
-    // If matches email format, use as is. Otherwise append dummy domain.
-    const emailToUse = username.includes('@') ? username : `${username}@vsx.local`;
-
-    const { error: err } = await signIn(emailToUse, password);
+    // Login directly with username and password
+    const { error: err } = await signIn(username, password);
     if (err) {
       setError(err);
       setIsLoading(false);

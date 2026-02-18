@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabaseClient';
-import type { User as SupaUser, Session } from '@supabase/supabase-js';
 
 export interface Profile {
   id: string;
@@ -12,18 +11,18 @@ export interface Profile {
 }
 
 interface AuthContextValue {
-  session: Session | null;
-  user: SupaUser | null;
+  user: { id: string } | null;
   profile: Profile | null;
   loading: boolean;
-  signIn: (email: string, password: string) => Promise<{ error: string | null }>;
-  signUp: (email: string, password: string, username: string, displayName: string) => Promise<{ error: string | null }>;
+  signIn: (username: string, password: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   isAdmin: boolean;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
+
+const STORAGE_KEY = 'vsx_user_id';
 
 export const useAuth = () => {
   const ctx = useContext(AuthContext);
@@ -32,80 +31,82 @@ export const useAuth = () => {
 };
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [session, setSession] = useState<Session | null>(null);
+  const [user, setUser] = useState<{ id: string } | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchProfile = async (userId: string) => {
+  // Check for saved session on mount
+  useEffect(() => {
+    const savedUserId = localStorage.getItem(STORAGE_KEY);
+    if (savedUserId) {
+      // Fetch profile by ID
+      supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', savedUserId)
+        .single()
+        .then(({ data, error }) => {
+          if (!error && data) {
+            setProfile(data as Profile);
+            setUser({ id: data.id });
+          } else {
+            // Invalid saved session, clear it
+            localStorage.removeItem(STORAGE_KEY);
+          }
+          setLoading(false);
+        });
+    } else {
+      setLoading(false);
+    }
+  }, []);
+
+  const signIn = async (username: string, password: string) => {
+    // Look up user by username and password
     const { data, error } = await supabase
       .from('profiles')
       .select('*')
-      .eq('id', userId)
+      .eq('username', username.toLowerCase())
+      .eq('password', password)
       .single();
-    if (!error && data) {
-      setProfile(data as Profile);
+
+    if (error || !data) {
+      return { error: 'Invalid username or password' };
     }
-  };
 
-  // Listen to auth state changes
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session: s } }) => {
-      setSession(s);
-      if (s?.user) {
-        fetchProfile(s.user.id).finally(() => setLoading(false));
-      } else {
-        setLoading(false);
-      }
-    }).catch(() => setLoading(false));
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => {
-      setSession(s);
-      if (s?.user) {
-        fetchProfile(s.user.id);
-      } else {
-        setProfile(null);
-      }
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
-
-  const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    return { error: error?.message ?? null };
-  };
-
-  const signUp = async (email: string, password: string, username: string, displayName: string) => {
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: { username, display_name: displayName },
-      },
-    });
-    return { error: error?.message ?? null };
+    // Save session
+    setProfile(data as Profile);
+    setUser({ id: data.id });
+    localStorage.setItem(STORAGE_KEY, data.id);
+    
+    return { error: null };
   };
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    localStorage.removeItem(STORAGE_KEY);
     setProfile(null);
+    setUser(null);
   };
 
   const refreshProfile = async () => {
-    if (session?.user) {
-      await fetchProfile(session.user.id);
+    if (user) {
+      const { data } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single();
+      if (data) {
+        setProfile(data as Profile);
+      }
     }
   };
 
   return (
     <AuthContext.Provider
       value={{
-        session,
-        user: session?.user ?? null,
+        user,
         profile,
         loading,
         signIn,
-        signUp,
         signOut,
         refreshProfile,
         isAdmin: profile?.role === 'admin',

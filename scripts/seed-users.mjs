@@ -70,12 +70,26 @@ async function seedUsers() {
   console.log('🚀 Starting user seeding...\n');
   
   let successCount = 0;
+  let skipCount = 0;
   let errorCount = 0;
 
   for (const user of USERS) {
     const email = `${user.username}@vsx.local`;
     
     try {
+      // Check if profile already exists (more reliable than checking auth)
+      const { data: existingProfile } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('username', user.username)
+        .single();
+
+      if (existingProfile) {
+        console.log(`⏭️  User ${user.username} already exists, skipping...`);
+        skipCount++;
+        continue;
+      }
+
       // Create auth user using Admin API
       const { data: authData, error: authError } = await supabase.auth.admin.createUser({
         email,
@@ -88,8 +102,10 @@ async function seedUsers() {
       });
 
       if (authError) {
-        if (authError.message.includes('already been registered')) {
-          console.log(`⏭️  User ${user.username} already exists, skipping...`);
+        // Check for duplicate email error
+        if (authError.message.includes('already') || authError.message.includes('duplicate')) {
+          console.log(`⏭️  User ${user.username} already registered, skipping...`);
+          skipCount++;
           continue;
         }
         throw authError;
@@ -98,23 +114,28 @@ async function seedUsers() {
       // Create profile
       const { error: profileError } = await supabase
         .from('profiles')
-        .upsert({
+        .insert({
           id: authData.user.id,
           username: user.username,
           display_name: user.displayName,
           role: user.role,
           cash_balance: STARTING_CAPITAL,
           starting_capital: STARTING_CAPITAL,
-        }, { onConflict: 'id' });
+        });
 
       if (profileError) {
         console.error(`❌ Profile error for ${user.username}:`, profileError.message);
+        // Try to clean up the auth user
+        await supabase.auth.admin.deleteUser(authData.user.id);
         errorCount++;
         continue;
       }
 
       console.log(`✅ Created: ${user.username} (${user.role})`);
       successCount++;
+      
+      // Small delay to avoid rate limiting
+      await new Promise(r => setTimeout(r, 100));
       
     } catch (err) {
       console.error(`❌ Error creating ${user.username}:`, err.message);
@@ -124,6 +145,7 @@ async function seedUsers() {
 
   console.log('\n========================================');
   console.log(`✅ Successfully created: ${successCount} users`);
+  console.log(`⏭️  Skipped (existing): ${skipCount} users`);
   console.log(`❌ Errors: ${errorCount}`);
   console.log('========================================\n');
 }

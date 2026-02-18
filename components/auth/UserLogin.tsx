@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { LogIn, Eye, EyeOff, UserPlus } from 'lucide-react';
+import { LogIn, Eye, EyeOff } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { useAuth } from './AuthProvider';
 
@@ -8,16 +8,12 @@ interface UserLoginProps {
 }
 
 export const UserLogin: React.FC<UserLoginProps> = ({ onOpenAdmin }) => {
-  const { signIn, signUp } = useAuth();
-  const [isSignUp, setIsSignUp] = useState(false);
-  const [email, setEmail] = useState('');
+  const { signIn } = useAuth();
   const [password, setPassword] = useState('');
   const [username, setUsername] = useState('');
-  const [displayName, setDisplayName] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [signUpSuccess, setSignUpSuccess] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   // Matrix rain effect
@@ -95,29 +91,10 @@ export const UserLogin: React.FC<UserLoginProps> = ({ onOpenAdmin }) => {
     setError('');
     setIsLoading(true);
 
-    const dummyEmail = `${username.toLowerCase().replace(/\s+/g, '')}@vsx.local`;
-
-    if (isSignUp) {
-      if (!username || !displayName) {
-        setError('All fields are required');
-        setIsLoading(false);
-        return;
-      }
-      // Pass the dummy email to Supabase
-      const { error: err } = await signUp(dummyEmail, password, username, displayName);
-      if (err) setError(err);
-      else setSignUpSuccess(true);
-    } else {
-      // Login with dummy email
-      const { error: err } = await signIn(dummyEmail, password);
-      // specific error handling for invalid login
-      if (err) {
-        if (err.includes("Invalid login credentials")) {
-          setError("Invalid username or password");
-        } else {
-          setError(err);
-        }
-      }
+    // Login directly with username and password
+    const { error: err } = await signIn(username, password);
+    if (err) {
+      setError(err);
     }
     setIsLoading(false);
   };
@@ -173,119 +150,74 @@ export const UserLogin: React.FC<UserLoginProps> = ({ onOpenAdmin }) => {
           </div>
 
           <div className="bg-surface/80 backdrop-blur-xl border border-border rounded-2xl p-8 shadow-2xl shadow-black/20">
-            {signUpSuccess ? (
-              <div className="text-center space-y-4 py-8">
-                <div className="w-16 h-16 mx-auto rounded-full bg-primary/20 flex items-center justify-center">
-                  <UserPlus className="w-8 h-8 text-primary" />
-                </div>
-                <h2 className="text-2xl font-bold text-textMain">Account Created!</h2>
-                <p className="text-sm text-textMuted">Admin approval required. Please wait for activation.</p>
-                <Button onClick={() => { setSignUpSuccess(false); setIsSignUp(false); }} className="mt-4">
-                  Go to Sign In
-                </Button>
+            <div className="mb-8">
+              <h2 className="text-2xl font-bold text-textMain mb-2">Welcome!</h2>
+              <p className="text-sm text-textMuted">Enter your credentials to access the trading floor</p>
+            </div>
+
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-textMuted uppercase tracking-wider mb-2">Username</label>
+                <input
+                  type="text"
+                  value={username}
+                  onChange={(e) => { setUsername(e.target.value); setError(''); }}
+                  className="w-full bg-surfaceElevated/50 border border-border rounded-xl px-4 py-3 text-textMain placeholder:text-textMuted/50 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-all"
+                  placeholder="Enter username"
+                  autoComplete="username"
+                  autoFocus
+                />
               </div>
-            ) : (
-              <>
-                <div className="mb-8">
-                  <h2 className="text-2xl font-bold text-textMain mb-2">
-                    {isSignUp ? 'Create Account' : 'Welcome!'}
-                  </h2>
-                  <p className="text-sm text-textMuted">
-                    {isSignUp ? 'Sign up to start trading' : 'Enter your credentials to access the trading floor'}
-                  </p>
-                </div>
 
-                <form onSubmit={handleSubmit} className="space-y-4">
-                  {isSignUp && (
-                    <>
-                      {/* Removed separate Username input here as it's now the main input below */}
-                      <div>
-                        <label className="block text-xs font-semibold text-textMuted uppercase tracking-wider mb-2">Display Name</label>
-                        <input
-                          type="text"
-                          value={displayName}
-                          onChange={(e) => { setDisplayName(e.target.value); setError(''); }}
-                          className="w-full bg-surfaceElevated/50 border border-border rounded-xl px-4 py-3 text-textMain placeholder:text-textMuted/50 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-all"
-                          placeholder="Your display name"
-                        />
-                      </div>
-                    </>
-                  )}
-
-                  <div>
-                    {/* Changed label from Email to Username */}
-                    <label className="block text-xs font-semibold text-textMuted uppercase tracking-wider mb-2">Username</label>
-                    <input
-                      type="text" // Changed from email to text
-                      value={username} // Bound to username state
-                      onChange={(e) => { setUsername(e.target.value); setError(''); }} // Updates username state
-                      className="w-full bg-surfaceElevated/50 border border-border rounded-xl px-4 py-3 text-textMain placeholder:text-textMuted/50 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-all"
-                      placeholder="Enter username"
-                      autoComplete="username"
-                      autoFocus
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-textMuted uppercase tracking-wider mb-2">Password</label>
-                    <div className="relative">
-                      <input
-                        type={showPassword ? 'text' : 'password'}
-                        value={password}
-                        onChange={(e) => { setPassword(e.target.value); setError(''); }}
-                        className="w-full bg-surfaceElevated/50 border border-border rounded-xl px-4 py-3 text-textMain placeholder:text-textMuted/50 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-all pr-12"
-                        placeholder="Enter your password"
-                        autoComplete={isSignUp ? 'new-password' : 'current-password'}
-                      />
-                      <button type="button" onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-4 top-1/2 -translate-y-1/2 text-textMuted hover:text-textMain transition-colors">
-                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </button>
-                    </div>
-                  </div>
-
-                  {error && (
-                    <div className="flex items-center gap-2 text-negative text-sm bg-negative/10 border border-negative/20 px-4 py-3 rounded-xl">
-                      <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                      </svg>
-                      {error}
-                    </div>
-                  )}
-
-                  <Button type="submit" disabled={!username || !password || isLoading}
-                    className="w-full py-3.5 text-base font-semibold shadow-lg shadow-primary/20 hover:shadow-primary/30 transition-shadow">
-                    {isLoading ? (
-                      <div className="flex items-center gap-2">
-                        <div className="w-4 h-4 border-2 border-background/30 border-t-background rounded-full animate-spin" />
-                        {isSignUp ? 'Creating account...' : 'Signing in...'}
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        {isSignUp ? <UserPlus className="w-4 h-4" /> : <LogIn className="w-4 h-4" />}
-                        {isSignUp ? 'Create Account' : 'Sign In'}
-                      </div>
-                    )}
-                  </Button>
-                </form>
-
-                <div className="mt-6 text-center">
-                  <button
-                    onClick={() => { setIsSignUp(!isSignUp); setError(''); setSignUpSuccess(false); }}
-                    className="text-sm text-primary hover:text-primary/80 transition-colors"
-                  >
-                    {isSignUp ? 'Already have an account? Sign In' : "Don't have an account? Sign Up"}
+              <div>
+                <label className="block text-xs font-semibold text-textMuted uppercase tracking-wider mb-2">Password</label>
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => { setPassword(e.target.value); setError(''); }}
+                    className="w-full bg-surfaceElevated/50 border border-border rounded-xl px-4 py-3 text-textMain placeholder:text-textMuted/50 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-all pr-12"
+                    placeholder="Enter your password"
+                    autoComplete="current-password"
+                  />
+                  <button type="button" onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-textMuted hover:text-textMain transition-colors">
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
+              </div>
 
-                <div className="mt-4 pt-4 border-t border-border/50">
-                  <button onClick={onOpenAdmin}
-                    className="w-full text-center text-xs text-textMuted hover:text-primary transition-colors py-2">
-                    Admin Access →
-                  </button>
+              {error && (
+                <div className="flex items-center gap-2 text-negative text-sm bg-negative/10 border border-negative/20 px-4 py-3 rounded-xl">
+                  <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                  </svg>
+                  {error}
                 </div>
-              </>
-            )}
+              )}
+
+              <Button type="submit" disabled={!username || !password || isLoading}
+                className="w-full py-3.5 text-base font-semibold shadow-lg shadow-primary/20 hover:shadow-primary/30 transition-shadow">
+                {isLoading ? (
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 border-2 border-background/30 border-t-background rounded-full animate-spin" />
+                    Signing in...
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <LogIn className="w-4 h-4" />
+                    Sign In
+                  </div>
+                )}
+              </Button>
+            </form>
+
+            <div className="mt-4 pt-4 border-t border-border/50">
+              <button onClick={onOpenAdmin}
+                className="w-full text-center text-xs text-textMuted hover:text-primary transition-colors py-2">
+                Admin Access →
+              </button>
+            </div>
           </div>
 
           <p className="text-center text-xs text-textMuted/50 mt-6">
