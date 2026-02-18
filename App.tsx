@@ -148,7 +148,7 @@ const App: React.FC = () => {
       transactions={transactions}
       onExecuteTrade={executeTrade}
       onLogout={signOut}
-      onOpenAdmin={() => setView('admin_login')}
+      onOpenAdmin={() => setView(isAdmin ? 'admin_dashboard' : 'admin_login')}
       isAdmin={isAdmin}
     />
   );
