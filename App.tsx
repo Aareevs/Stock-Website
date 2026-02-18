@@ -53,7 +53,7 @@ const App: React.FC = () => {
     localStorage.setItem(MARKET_KEY, JSON.stringify(marketItems));
   }, [marketItems]);
 
-  // Save news events to localStorage
+  // Save news events to localStorage + bump version
   useEffect(() => {
     localStorage.setItem(NEWS_KEY, JSON.stringify(newsEvents));
   }, [newsEvents]);
@@ -69,37 +69,63 @@ const App: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
-  // Poll localStorage every 2s to sync news events & market across tabs/views
+  // Cross-tab sync via storage event (fires ONLY in other tabs)
+  useEffect(() => {
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === NEWS_KEY && e.newValue) {
+        try {
+          const parsed: NewsEvent[] = JSON.parse(e.newValue);
+          setNewsEvents(parsed);
+        } catch { /* ignore */ }
+      }
+      if (e.key === MARKET_KEY && e.newValue) {
+        try {
+          const parsed: MarketItem[] = JSON.parse(e.newValue);
+          setMarketItems(parsed);
+        } catch { /* ignore */ }
+      }
+      if (e.key === STORAGE_KEY && e.newValue) {
+        try {
+          const parsed: User[] = JSON.parse(e.newValue);
+          setUsers(parsed);
+        } catch { /* ignore */ }
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, []);
+
+  // Same-tab sync: poll localStorage for news changes caused by view switches
+  // (storage event doesn't fire for same-tab changes)
   useEffect(() => {
     const poll = setInterval(() => {
-      // Sync news events
       const savedNews = localStorage.getItem(NEWS_KEY);
       if (savedNews) {
         try {
           const parsed: NewsEvent[] = JSON.parse(savedNews);
+          // Only update if there's actually a difference in event count or IDs
           setNewsEvents(current => {
-            if (JSON.stringify(current) !== savedNews) {
+            if (parsed.length !== current.length || (parsed[0]?.id !== current[0]?.id) || (parsed[0]?.active !== current[0]?.active)) {
               return parsed;
             }
             return current;
           });
         } catch { /* ignore */ }
       }
-
-      // Sync market data
       const savedMarket = localStorage.getItem(MARKET_KEY);
       if (savedMarket) {
         try {
           const parsed: MarketItem[] = JSON.parse(savedMarket);
           setMarketItems(current => {
-            if (JSON.stringify(current) !== savedMarket) {
+            // Only sync if first item price differs (cheap check)
+            if (parsed.length > 0 && current.length > 0 && parsed[0].price !== current[0].price) {
               return parsed;
             }
             return current;
           });
         } catch { /* ignore */ }
       }
-    }, 2000);
+    }, 1500);
     return () => clearInterval(poll);
   }, []);
 

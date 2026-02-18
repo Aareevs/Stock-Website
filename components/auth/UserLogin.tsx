@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { LogIn, Eye, EyeOff } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { User } from '../../types';
@@ -15,6 +15,84 @@ export const UserLogin: React.FC<UserLoginProps> = ({ users, onLogin, onOpenAdmi
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  // Matrix rain effect
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    let animationId: number;
+    const chars = '₹$%&@#0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZアイウエオカキクケコサシスセソタチツテト▲▼◆►◄';
+    const fontSize = 14;
+    let columns: number;
+    let drops: number[];
+
+    const resize = () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      columns = Math.floor(canvas.width / fontSize);
+      drops = Array.from({ length: columns }, () => Math.random() * -100);
+    };
+
+    resize();
+    window.addEventListener('resize', resize);
+
+    const draw = () => {
+      // Fade trail — low alpha for long tails
+      ctx.fillStyle = 'rgba(10, 14, 20, 0.05)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      for (let i = 0; i < drops.length; i++) {
+        const char = chars[Math.floor(Math.random() * chars.length)];
+        const x = i * fontSize;
+        const y = drops[i] * fontSize;
+
+        // Randomize brightness for flickering effect
+        const brightness = Math.random();
+        if (brightness > 0.95) {
+          // Glowing white head — rare, bright flicker
+          ctx.fillStyle = '#FFFFFF';
+          ctx.shadowColor = '#1ED3A6';
+          ctx.shadowBlur = 20;
+        } else if (brightness > 0.7) {
+          // Bright green
+          ctx.fillStyle = '#1ED3A6';
+          ctx.shadowColor = '#1ED3A6';
+          ctx.shadowBlur = 10;
+        } else if (brightness > 0.3) {
+          // Medium green
+          ctx.fillStyle = `rgba(30, 211, 166, ${0.3 + brightness * 0.3})`;
+          ctx.shadowBlur = 0;
+        } else {
+          // Dim green — fading tail
+          ctx.fillStyle = `rgba(30, 211, 166, ${0.05 + brightness * 0.15})`;
+          ctx.shadowBlur = 0;
+        }
+
+        ctx.font = `${fontSize}px monospace`;
+        ctx.fillText(char, x, y);
+        ctx.shadowBlur = 0;
+
+        // Reset drop when it falls off screen
+        if (y > canvas.height && Math.random() > 0.975) {
+          drops[i] = 0;
+        }
+        drops[i] += 0.4 + Math.random() * 0.6;
+      }
+
+      animationId = requestAnimationFrame(draw);
+    };
+
+    draw();
+
+    return () => {
+      cancelAnimationFrame(animationId);
+      window.removeEventListener('resize', resize);
+    };
+  }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,18 +115,21 @@ export const UserLogin: React.FC<UserLoginProps> = ({ users, onLogin, onOpenAdmi
 
   return (
     <div className="min-h-screen bg-background flex relative overflow-hidden">
+      {/* Matrix Rain Canvas */}
+      <canvas
+        ref={canvasRef}
+        className="absolute inset-0 z-0"
+        style={{ opacity: 0.8 }}
+      />
+
+      {/* Dark gradient overlay for readability */}
+      <div className="absolute inset-0 z-[1] bg-gradient-to-br from-background/40 via-transparent to-background/70" />
+
       {/* Tech Fest Logo - Top Left Corner */}
       <img src="/techfest-logo.png" alt="Tech Fest" className="absolute top-6 left-6 h-12 z-20 drop-shadow-lg" />
 
-      {/* Animated Background Elements */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -right-40 w-80 h-80 bg-primary/5 rounded-full blur-3xl animate-pulse" />
-        <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-blue-500/5 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-primary/3 rounded-full blur-[100px]" />
-      </div>
-
       {/* Left Side - Branding */}
-      <div className="hidden lg:flex flex-1 items-center justify-center relative">
+      <div className="hidden lg:flex flex-1 items-center justify-center relative z-10">
         <div className="max-w-md text-center space-y-6 px-12">
           <img src="/vsx-logo.png" alt="VSX: Buy or Bail" className="h-56 mx-auto drop-shadow-2xl" />
           <p className="text-lg text-textMuted leading-relaxed">
@@ -57,15 +138,15 @@ export const UserLogin: React.FC<UserLoginProps> = ({ users, onLogin, onOpenAdmi
 
           {/* Floating Stats */}
           <div className="grid grid-cols-3 gap-4 mt-8">
-            <div className="bg-surface/50 backdrop-blur border border-border/50 rounded-xl p-4">
+            <div className="bg-surface/50 backdrop-blur border border-primary/20 rounded-xl p-4 shadow-lg shadow-primary/5">
               <div className="text-2xl font-bold text-primary">40</div>
               <div className="text-xs text-textMuted mt-1">Players</div>
             </div>
-            <div className="bg-surface/50 backdrop-blur border border-border/50 rounded-xl p-4">
+            <div className="bg-surface/50 backdrop-blur border border-primary/20 rounded-xl p-4 shadow-lg shadow-primary/5">
               <div className="text-2xl font-bold text-primary">12</div>
               <div className="text-xs text-textMuted mt-1">Stocks</div>
             </div>
-            <div className="bg-surface/50 backdrop-blur border border-border/50 rounded-xl p-4">
+            <div className="bg-surface/50 backdrop-blur border border-primary/20 rounded-xl p-4 shadow-lg shadow-primary/5">
               <div className="text-2xl font-bold text-primary">₹10Cr</div>
               <div className="text-xs text-textMuted mt-1">Starting Capital</div>
             </div>
