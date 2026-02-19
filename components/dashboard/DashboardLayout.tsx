@@ -182,7 +182,14 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
                   <div className="font-mono font-bold text-lg">₹{(item.price ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
                   <span className={`flex items-center gap-1 text-xs font-semibold ${(item.change ?? 0) >= 0 ? 'text-primary' : 'text-negative'}`}> {(item.change ?? 0) >= 0 ? '+' : ''}{(item.change ?? 0).toFixed(2)}%</span>
                 </div>
-                <MiniSparkline data={(item.priceHistory || []).slice(-20)} color={(item.change ?? 0) >= 0 ? '#1ED3A6' : '#EF4444'} />
+                <div style={{ background: '#222', borderRadius: '8px', border: '1px solid #333', padding: '2px' }}>
+                  <MiniSparkline 
+                    data={((item.priceHistory && item.priceHistory.length > 0) ? item.priceHistory.slice(-20) : [
+                      { value: item.price ?? 0 }, { value: item.price ?? 0 }, { value: item.price ?? 0 }
+                    ])}
+                    color={(item.change ?? 0) >= 0 ? '#1ED3A6' : '#EF4444'}
+                  />
+                </div>
               </Card>
             ))}
           </div>
