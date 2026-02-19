@@ -697,29 +697,6 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
               {renderOverview()}
             </div>
             <div className="space-y-6">
-              {/* Activity Frequency */}
-              <Card>
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-sm font-semibold">Activity Frequency</h3>
-                </div>
-                <div className="grid grid-cols-7 gap-1 h-32 content-end">
-                  {Array.from({ length: 49 }).map((_, i) => {
-                    const opacity = Math.random();
-                    const active = Math.random() > 0.6;
-                    return (
-                      <div
-                        key={i}
-                        className={`rounded-sm transition-all duration-500 hover:scale-110 ${active ? 'bg-primary' : 'bg-surfaceElevated'}`}
-                        style={{
-                          opacity: active ? 0.2 + (opacity * 0.8) : 1,
-                          height: active ? `${20 + (opacity * 60)}%` : '100%',
-                          alignSelf: 'end'
-                        }}
-                      />
-                    );
-                  })}
-                </div>
-              </Card>
 
               {/* Sentiment Gauge */}
               <Card>

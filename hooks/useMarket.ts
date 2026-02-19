@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
+import { generatePriceHistory } from '../engine/priceEngine';
 
 export interface MarketItem {
   symbol: string;
@@ -13,11 +14,16 @@ export interface MarketItem {
 }
 
 // Transform database row to include both price_history and priceHistory
-const transformMarketItem = (item: any): MarketItem => ({
-  ...item,
-  price_history: item.price_history || [],
-  priceHistory: item.price_history || [],
-});
+// If price_history from DB is empty, generate synthetic history client-side
+const transformMarketItem = (item: any): MarketItem => {
+  const dbHistory = item.price_history || [];
+  const history = dbHistory.length > 0 ? dbHistory : generatePriceHistory(item.price, 50);
+  return {
+    ...item,
+    price_history: history,
+    priceHistory: history,
+  };
+};
 
 export function useMarket() {
   const [marketItems, setMarketItems] = useState<MarketItem[]>([]);
