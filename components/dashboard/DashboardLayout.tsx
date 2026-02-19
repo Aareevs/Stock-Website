@@ -153,61 +153,40 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
           </Card>
           <Card className="bg-gradient-to-br from-surface to-surfaceElevated">
             <h3 className="text-sm text-textMuted mb-1">P&L</h3>
-            <div className={`text-2xl font-bold font-mono ${totalNetWorth - startingCapital >= 0 ? 'text-primary' : 'text-negative'}`}>
+            <div className={`text-2xl font-bold font-mono ${totalNetWorth - startingCapital >= 0 ? 'text-primary' : 'text-negative'}`}> 
               {totalNetWorth - startingCapital >= 0 ? '+' : ''}₹{(totalNetWorth - startingCapital).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
             </div>
           </Card>
         </div>
 
-        {/* Market Performance Snapshot */}
-        <Card>
-          <div className="flex justify-between items-center mb-6">
-            <h3 className="text-lg font-semibold">Market Snapshot</h3>
-            <Button variant="ghost" size="sm" onClick={() => setActiveTab('Markets')}>View All</Button>
+        {/* Market Snapshot - All Companies as Cards */}
+        <div className="mb-6">
+          <h3 className="text-lg font-semibold mb-4">Market Snapshot</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            {marketItems.map((item) => (
+              <Card
+                key={item.symbol}
+                className="cursor-pointer hover:border-primary/50 transition-colors group"
+                onClick={() => setSelectedStock(item)}
+              >
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="w-8 h-8 rounded-full bg-surfaceElevated border border-border flex items-center justify-center font-bold text-primary">
+                    {item.icon}
+                  </div>
+                  <div>
+                    <div className="font-semibold text-textMain">{item.name}</div>
+                    <div className="text-xs text-textMuted">{item.symbol}</div>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="font-mono font-bold text-lg">₹{(item.price ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+                  <span className={`flex items-center gap-1 text-xs font-semibold ${(item.change ?? 0) >= 0 ? 'text-primary' : 'text-negative'}`}> {(item.change ?? 0) >= 0 ? '+' : ''}{(item.change ?? 0).toFixed(2)}%</span>
+                </div>
+                <MiniSparkline data={(item.priceHistory || []).slice(-20)} color={(item.change ?? 0) >= 0 ? '#1ED3A6' : '#EF4444'} />
+              </Card>
+            ))}
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="text-textMuted text-xs uppercase tracking-wider border-b border-border">
-                  <th className="pb-3 pl-2">Company</th>
-                  <th className="pb-3">Price</th>
-                  <th className="pb-3">Change</th>
-                  <th className="pb-3 text-right pr-2">Trend</th>
-                </tr>
-              </thead>
-              <tbody className="text-sm">
-                {marketItems.slice(0, 5).map((item) => (
-                  <tr
-                    key={item.symbol}
-                    className="border-b border-border/50 hover:bg-surfaceElevated/50 transition-colors cursor-pointer"
-                    onClick={() => setSelectedStock(item)}
-                  >
-                    <td className="py-4 pl-2">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-surfaceElevated border border-border flex items-center justify-center font-bold text-primary">
-                          {item.icon}
-                        </div>
-                        <div>
-                          <div className="font-semibold text-textMain">{item.name}</div>
-                          <div className="text-xs text-textMuted">{item.symbol}</div>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="py-4 font-mono font-medium">₹{(item.price ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                    <td className="py-4">
-                      <span className={`flex items-center gap-1 ${(item.change ?? 0) >= 0 ? 'text-primary' : 'text-negative'}`}>
-                        {(item.change ?? 0) >= 0 ? '+' : ''}{(item.change ?? 0).toFixed(2)}%
-                      </span>
-                    </td>
-                    <td className="py-4 pr-2 w-32">
-                      <MiniSparkline data={(item.priceHistory || []).slice(-20)} color={item.change >= 0 ? '#1ED3A6' : '#EF4444'} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
+        </div>
       </>
     );
   };
