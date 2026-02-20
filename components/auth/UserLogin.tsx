@@ -106,10 +106,10 @@ export const UserLogin: React.FC<UserLoginProps> = ({ onOpenAdmin }) => {
       <div className="absolute inset-0 z-[1] bg-gradient-to-br from-background/40 via-transparent to-background/70" />
 
       {/* Tech Fest Logo */}
-      <img src="/techfest-logo.png" alt="Tech Fest" className="absolute top-6 left-6 h-12 z-20 drop-shadow-lg" />
+      <img src="/techfest-logo.png" alt="Tech Fest" className="absolute top-12 left-12 h-9 z-20 drop-shadow-lg" />
 
       {/* Vedam School of Technology Logo */}
-      <img src="/vedam-logo.png" alt="Vedam School of Technology" className="absolute top-6 right-6 h-10 z-20 drop-shadow-lg" />
+      <img src="/vedam-logo.png" alt="Vedam School of Technology" className="absolute top-11 right-12 h-8 z-20 drop-shadow-lg" />
 
       {/* Left Side - Branding */}
       <div className="hidden lg:flex flex-1 items-center justify-center relative z-10">

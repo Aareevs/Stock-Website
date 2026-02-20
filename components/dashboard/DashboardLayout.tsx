@@ -168,7 +168,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
             <span className="text-sm text-textMuted block mb-1">
               Total Net Worth
             </span>
-            <span className="text-4xl md:text-5xl font-bold text-textMain">
+            <span className="text-4xl md:text-6xl font-bold text-textMain">
               ₹
               {totalNetWorth.toLocaleString("en-IN", {
                 minimumFractionDigits: 2,
@@ -401,36 +401,38 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
 
     return (
       <div className="space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <Card className="md:col-span-2 relative overflow-hidden bg-gradient-to-br from-surface to-surfaceElevated">
-            <div className="relative z-10">
-              <h3 className="text-sm text-textMuted mb-2">Total Net Worth</h3>
-              <div className="text-4xl font-bold mb-4 font-mono">
-                ₹
-                {totalNetWorth.toLocaleString("en-IN", {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-stretch">
+          <Card className="md:col-span-2 bg-gradient-to-br from-surface to-surfaceElevated">
+            <div className="flex flex-col justify-between h-full">
+              <div style={{ marginLeft: "1em" }}>
+                <h3 className="text-sm text-textMuted mb-1">Total Net Worth</h3>
+                <div className="text-5xl font-bold mb-4 font-mono">
+                  ₹
+                  {totalNetWorth.toLocaleString("en-IN", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}
+                </div>
               </div>
-              <div className="flex gap-4">
-                <div className="px-3 py-1 bg-surface/50 rounded border border-border">
-                  <span className="text-xs text-textMuted block">
-                    Cash Balance
+              <div className="flex flex-col gap-3 max-w-xs">
+                <div className="px-4 py-2 bg-surface/50 rounded-lg border border-border">
+                  <span className="text-xs text-textMuted block mb-0.5">
+                    Stock Value
                   </span>
-                  <span className="font-mono">
+                  <span className="font-mono font-semibold">
                     ₹
-                    {balance.toLocaleString("en-IN", {
+                    {totalPortfolioValue.toLocaleString("en-IN", {
                       minimumFractionDigits: 2,
                     })}
                   </span>
                 </div>
-                <div className="px-3 py-1 bg-surface/50 rounded border border-border">
-                  <span className="text-xs text-textMuted block">
-                    Stock Value
+                <div className="px-4 py-2 bg-surface/50 rounded-lg border border-border">
+                  <span className="text-xs text-textMuted block mb-0.5">
+                    Cash Balance
                   </span>
-                  <span className="font-mono">
+                  <span className="font-mono font-semibold">
                     ₹
-                    {totalPortfolioValue.toLocaleString("en-IN", {
+                    {balance.toLocaleString("en-IN", {
                       minimumFractionDigits: 2,
                     })}
                   </span>
