@@ -62,25 +62,37 @@ interface MiniSparklineProps {
 }
 
 export const MiniSparkline: React.FC<MiniSparklineProps> = ({ data, color = '#1ED3A6' }) => {
-  const gradientId = `spark-${Math.random().toString(36).slice(2, 8)}`;
+  const gradientId = React.useMemo(() => `spark-${Math.random().toString(36).slice(2, 8)}`, []);
+
+  // Compute tight Y-axis domain to exaggerate price movement visibility
+  const values = data.map(d => d.value);
+  const minVal = Math.min(...values);
+  const maxVal = Math.max(...values);
+  const range = maxVal - minVal;
+  // Add 20% padding so the line doesn't touch edges; if range is 0, use ±1% of price
+  const padding = range > 0 ? range * 0.2 : minVal * 0.01;
+  const yDomain: [number, number] = [minVal - padding, maxVal + padding];
+
   return (
-    <div className="w-full h-[40px]">
+    <div className="w-full h-[60px]">
       <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={data}>
+        <AreaChart data={data} margin={{ top: 2, right: 0, left: 0, bottom: 2 }}>
           <defs>
             <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor={color} stopOpacity={0.4}/>
-              <stop offset="95%" stopColor={color} stopOpacity={0}/>
+              <stop offset="5%" stopColor={color} stopOpacity={0.5}/>
+              <stop offset="95%" stopColor={color} stopOpacity={0.05}/>
             </linearGradient>
           </defs>
+          <YAxis domain={yDomain} hide />
           <Area 
-            type="monotone" 
+            type="natural" 
             dataKey="value" 
             stroke={color} 
-            strokeWidth={2} 
+            strokeWidth={1.5} 
             fill={`url(#${gradientId})`}
             fillOpacity={1}
             dot={false}
+            isAnimationActive={false}
           />
         </AreaChart>
       </ResponsiveContainer>

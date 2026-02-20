@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabaseClient';
-import { generatePriceHistory } from '../engine/priceEngine';
+import { generatePriceHistory, tickAllPrices } from '../engine/priceEngine';
 
 export interface MarketItem {
   symbol: string;
@@ -28,6 +28,7 @@ const transformMarketItem = (item: any): MarketItem => {
 export function useMarket() {
   const [marketItems, setMarketItems] = useState<MarketItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const initializedRef = useRef(false);
 
   // Fetch initial market data
   useEffect(() => {
@@ -38,7 +39,10 @@ export function useMarket() {
           .select('*')
           .order('symbol');
         if (error) throw error;
-        if (data) setMarketItems(data.map(transformMarketItem));
+        if (data) {
+          setMarketItems(data.map(transformMarketItem));
+          initializedRef.current = true;
+        }
       } catch (err) {
         console.error('Error fetching market items:', err);
       } finally {
@@ -48,7 +52,21 @@ export function useMarket() {
     fetch();
   }, []);
 
-  // Subscribe to real-time market changes
+  // Client-side price ticking — simulate live market every 5 seconds
+  useEffect(() => {
+    if (!initializedRef.current && marketItems.length === 0) return;
+
+    const tickInterval = setInterval(() => {
+      setMarketItems(prev => {
+        if (prev.length === 0) return prev;
+        return tickAllPrices(prev);
+      });
+    }, 5000);
+
+    return () => clearInterval(tickInterval);
+  }, [marketItems.length]);
+
+  // Subscribe to real-time DB changes (admin actions like news events, price resets)
   useEffect(() => {
     const channel = supabase
       .channel('market-changes')
@@ -63,25 +81,9 @@ export function useMarket() {
         }
       )
       .subscribe();
-    
-    // Polling fallback: fetch every 5 seconds
-    const interval = setInterval(async () => {
-      const { data } = await supabase
-        .from('market_items')
-        .select('*')
-        .order('symbol');
-      if (data) {
-        setMarketItems(prev => {
-          const transformed = data.map(transformMarketItem);
-          const isDifferent = JSON.stringify(prev) !== JSON.stringify(transformed);
-          return isDifferent ? transformed : prev;
-        });
-      }
-    }, 5000);
 
-    return () => { 
-      supabase.removeChannel(channel); 
-      clearInterval(interval);
+    return () => {
+      supabase.removeChannel(channel);
     };
   }, []);
 
