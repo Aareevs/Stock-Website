@@ -108,6 +108,9 @@ export const UserLogin: React.FC<UserLoginProps> = ({ onOpenAdmin }) => {
       {/* Tech Fest Logo */}
       <img src="/techfest-logo.png" alt="Tech Fest" className="absolute top-6 left-6 h-12 z-20 drop-shadow-lg" />
 
+      {/* Vedam School of Technology Logo */}
+      <img src="/vedam-logo.png" alt="Vedam School of Technology" className="absolute top-6 right-6 h-10 z-20 drop-shadow-lg" />
+
       {/* Left Side - Branding */}
       <div className="hidden lg:flex flex-1 items-center justify-center relative z-10">
         <div className="max-w-md text-center space-y-6 px-12">
