@@ -155,13 +155,17 @@ on conflict (symbol) do nothing;
 create or replace function public.handle_new_user()
 returns trigger as $$
 begin
-  insert into public.profiles (id, username, display_name, role)
-  values (
-    new.id,
-    coalesce(new.raw_user_meta_data->>'username', split_part(new.email, '@', 1)),
-    coalesce(new.raw_user_meta_data->>'display_name', split_part(new.email, '@', 1)),
-    coalesce(new.raw_user_meta_data->>'role', 'participant')
-  );
+  -- Check if profile already exists before inserting
+  -- This prevents duplicate profile creation if trigger fires unexpectedly
+  if not exists (select 1 from public.profiles where id = new.id) then
+    insert into public.profiles (id, username, display_name, role)
+    values (
+      new.id,
+      coalesce(new.raw_user_meta_data->>'username', split_part(new.email, '@', 1)),
+      coalesce(new.raw_user_meta_data->>'display_name', split_part(new.email, '@', 1)),
+      coalesce(new.raw_user_meta_data->>'role', 'participant')
+    );
+  end if;
   return new;
 end;
 $$ language plpgsql security definer;

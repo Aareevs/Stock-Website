@@ -148,6 +148,22 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
             onTrade={() => handleOpenTrade(selectedStock)}
           />
         </main>
+        {tradeModalOpen && (
+          <TradeModal
+            isOpen={tradeModalOpen}
+            onClose={() => setTradeModalOpen(false)}
+            asset={selectedAsset}
+            balance={balance}
+            onConfirm={handleConfirmTrade}
+            ownedQuantity={
+              portfolio.find((p) => p.symbol === selectedAsset?.symbol)?.amount ||
+              0
+            }
+            transactions={transactions.filter(
+              (t) => t.symbol === selectedAsset?.symbol,
+            )}
+          />
+        )}
       </div>
     );
   }

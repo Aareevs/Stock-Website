@@ -9,7 +9,7 @@ interface AdminLoginProps {
 }
 
 export const AdminLogin: React.FC<AdminLoginProps> = ({ onLogin, onBack }) => {
-  const { signIn } = useAuth();
+  const { signInAdmin } = useAuth();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -22,7 +22,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLogin, onBack }) => {
     setIsLoading(true);
 
     // Login directly with username and password
-    const { error: err } = await signIn(username, password);
+    const { error: err } = await signInAdmin(username, password);
     if (err) {
       setError(err);
       setIsLoading(false);
