@@ -260,41 +260,25 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ marketItems }) => {
     setDeleteLoading(true);
     setError(null);
     try {
-      // Delete portfolios and transactions first
-      await supabase.from('portfolios').delete().eq('user_id', userId);
-      await supabase.from('transactions').delete().eq('user_id', userId);
-      
-      // Try to delete auth user first if admin client is available
-      // This will cascade delete the profile due to foreign key constraint
-      // This prevents auth users from remaining and potentially causing profiles to reappear
-      if (supabaseAdmin) {
-        try {
-          // Try to delete auth user directly (cascade will delete profile)
-          // Don't check if it exists first to avoid unnecessary GET requests
-          const { error: authError } = await supabaseAdmin.auth.admin.deleteUser(userId);
-          if (!authError) {
-            // Auth user was deleted successfully, profile should be cascade deleted
-            setDeleteConfirmId(null);
-            if (selectedUser?.id === userId) setSelectedUser(null);
-            setUsers(prev => prev.filter(u => u.id !== userId));
-            setDeleteLoading(false);
-            return;
-          }
-          // If error is 404, auth user doesn't exist - continue with profile deletion
-          // For other errors, log but continue with profile deletion as fallback
-          if (authError.status !== 404) {
-            console.warn('Auth user deletion warning:', authError.message);
-          }
-        } catch (authErr: any) {
-          // If delete fails for any reason, continue with profile deletion
-          // This handles cases where auth user doesn't exist or other errors
-        }
+      if (!supabaseAdmin) {
+        throw new Error('Admin client not available. Please check VITE_SUPABASE_SERVICE_ROLE_KEY in environment variables.');
       }
+
+      // Delete portfolios and transactions first (use admin client to bypass RLS)
+      await supabaseAdmin.from('portfolios').delete().eq('user_id', userId);
+      await supabaseAdmin.from('transactions').delete().eq('user_id', userId);
       
-      // If auth user doesn't exist or admin client unavailable, delete profile directly
-      const { error: profileError } = await supabase.from('profiles').delete().eq('id', userId);
-      if (profileError) {
-        throw profileError;
+      // Delete the auth user — this cascades to delete the profile too
+      // (profiles.id references auth.users(id) on delete cascade)
+      const { error: authError } = await supabaseAdmin.auth.admin.deleteUser(userId);
+      if (authError) {
+        // If auth user doesn't exist (404), still try to clean up the profile row
+        if (authError.status === 404) {
+          const { error: profileError } = await supabaseAdmin.from('profiles').delete().eq('id', userId);
+          if (profileError) throw profileError;
+        } else {
+          throw new Error(`Failed to delete user: ${authError.message}`);
+        }
       }
       
       setDeleteConfirmId(null);
@@ -386,11 +370,11 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ marketItems }) => {
         for (const profile of orphanedProfiles) {
           try {
             // Delete related data first
-            await supabase.from('portfolios').delete().eq('user_id', profile.id);
-            await supabase.from('transactions').delete().eq('user_id', profile.id);
+            await supabaseAdmin.from('portfolios').delete().eq('user_id', profile.id);
+            await supabaseAdmin.from('transactions').delete().eq('user_id', profile.id);
             
             // Delete profile
-            const { error: deleteError } = await supabase.from('profiles').delete().eq('id', profile.id);
+            const { error: deleteError } = await supabaseAdmin.from('profiles').delete().eq('id', profile.id);
             if (deleteError) {
               console.error(`Failed to delete profile ${profile.id}:`, deleteError);
               errorCount++;
