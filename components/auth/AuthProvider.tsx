@@ -15,6 +15,7 @@ interface AuthContextValue {
   profile: Profile | null;
   loading: boolean;
   signIn: (username: string, password: string) => Promise<{ error: string | null }>;
+  signInAdmin: (username: string, password: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   isAdmin: boolean;
@@ -85,12 +86,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [user]);
 
   const signIn = async (username: string, password: string) => {
-    // Look up user by username and password
+    // Only allow participant accounts — admin cannot login via user login page
     const { data, error } = await supabase
       .from('profiles')
       .select('*')
       .eq('username', username.toLowerCase())
       .eq('password', password)
+      .eq('role', 'participant')
       .single();
 
     if (error || !data) {
@@ -102,6 +104,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser({ id: data.id });
     localStorage.setItem(STORAGE_KEY, data.id);
     
+    return { error: null };
+  };
+
+  const signInAdmin = async (username: string, password: string) => {
+    // Admin-only login — participants cannot use this
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('username', username.toLowerCase())
+      .eq('password', password)
+      .eq('role', 'admin')
+      .single();
+
+    if (error || !data) {
+      return { error: 'Invalid admin credentials' };
+    }
+
+    setProfile(data as Profile);
+    setUser({ id: data.id });
+    localStorage.setItem(STORAGE_KEY, data.id);
     return { error: null };
   };
 
@@ -131,6 +153,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         profile,
         loading,
         signIn,
+        signInAdmin,
         signOut,
         refreshProfile,
         isAdmin: profile?.role === 'admin',

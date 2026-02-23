@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Trophy, Users, BarChart2, Search, X, TrendingUp, TrendingDown, Newspaper, RotateCcw, Zap, AlertTriangle, ChevronDown, Check, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Trophy, Users, BarChart2, X, TrendingUp, TrendingDown, Newspaper, RotateCcw, Zap, AlertTriangle, ChevronDown, Check, RefreshCw } from 'lucide-react';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { StockChart, MiniSparkline } from '../dashboard/Charts';
+import { AdminUsers } from './AdminUsers';
 import type { Profile } from '../auth/AuthProvider';
 import type { MarketItem } from '../../hooks/useMarket';
 import type { NewsEvent } from '../../hooks/useNews';
@@ -24,7 +25,7 @@ interface AdminDashboardProps {
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ profile, marketItems, newsEvents, onBack, onTriggerNews, onStopNews, onResetAuction }) => {
-  const [activeView, setActiveView] = useState<'charts' | 'news'>('news');
+  const [activeView, setActiveView] = useState<'charts' | 'news' | 'users'>('news');
   const [selectedChart, setSelectedChart] = useState<MarketItem | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [isResetting, setIsResetting] = useState(false);
@@ -139,7 +140,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ profile, marketI
         </div>
 
         {/* Summary Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
           <Card className="bg-gradient-to-br from-surface to-surfaceElevated">
             <div className="flex items-center gap-2 mb-2">
               <BarChart2 className="w-4 h-4 text-primary" />
@@ -161,6 +162,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ profile, marketI
             </div>
             <div className="text-3xl font-bold">{newsEvents.filter(e => e.active).length}</div>
           </Card>
+          <Card
+            className="bg-gradient-to-br from-surface to-surfaceElevated cursor-pointer hover:border-primary/40 transition-colors"
+            onClick={() => setActiveView('users')}
+          >
+            <div className="flex items-center gap-2 mb-2">
+              <Users className="w-4 h-4 text-blue-400" />
+              <span className="text-sm text-textMuted">Participants</span>
+            </div>
+            <div className="text-3xl font-bold text-blue-400">→</div>
+          </Card>
         </div>
 
         {/* Tab Switcher */}
@@ -178,6 +189,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ profile, marketI
             onClick={() => setActiveView('news')}
           >
             <Newspaper className="w-4 h-4 mr-1" /> News Events
+          </Button>
+          <Button
+            variant={activeView === 'users' ? 'primary' : 'ghost'}
+            size="sm"
+            onClick={() => setActiveView('users')}
+          >
+            <Users className="w-4 h-4 mr-1" /> Users
           </Button>
         </div>
 
@@ -226,6 +244,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ profile, marketI
               </div>
             )}
           </div>
+        )}
+
+        {activeView === 'users' && (
+          <AdminUsers marketItems={marketItems} />
         )}
 
         {activeView === 'news' && (
