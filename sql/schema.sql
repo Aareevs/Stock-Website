@@ -136,7 +136,12 @@ drop policy if exists "Users can insert transactions" on transactions;
 create policy "Users can insert transactions"
   on transactions for insert with check (auth.uid() = user_id);
 
+-- ─── Add sector column if missing (for existing databases) ───
+alter table market_items add column if not exists sector text not null default 'Unknown';
+
 -- ─── Seed Market Data ───
+delete from market_items;
+
 insert into market_items (symbol, name, price, sentiment, sector, icon) values
   -- Automobile Sector
   ('VELOCITY', 'Velocity Auto', 1250.00, 'Bullish', 'Automobile', 'V'),
