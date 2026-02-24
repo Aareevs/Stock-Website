@@ -137,18 +137,25 @@ create policy "Users can insert transactions"
 
 -- ─── Seed Market Data ───
 insert into market_items (symbol, name, price, sentiment, icon) values
-  ('RADIANCE', 'Radiance Industries', 2450.00, 'Bullish', 'R'),
-  ('TCS', 'Tantra Consultancy', 3480.00, 'Bullish', 'T'),
-  ('HDFCBANK', 'Horizon Bank', 1650.00, 'Neutral', 'H'),
-  ('INFY', 'InfyTech Solutions', 1420.00, 'Bullish', 'I'),
-  ('ITC', 'IndoTobacco Corp', 440.00, 'Neutral', 'I'),
-  ('SBIN', 'Suvarna Bank of India', 620.00, 'Bullish', 'S'),
-  ('BHARTIARTL', 'Bharat AirLink', 1180.00, 'Bullish', 'B'),
-  ('HINDUNILVR', 'Hindva UniProducts', 2520.00, 'Neutral', 'H'),
-  ('KOTAKBANK', 'Kalpana Mahindra Bank', 1780.00, 'Neutral', 'K'),
-  ('LT', 'Lakshya & Turbo', 3200.00, 'Bullish', 'L'),
-  ('AXISBANK', 'Akshar Bank', 1050.00, 'Neutral', 'A'),
-  ('TATAMOTORS', 'Triveni Motors', 680.00, 'Bearish', 'T')
+  -- Automobile Sector
+  ('VELOCITY', 'Velocity Auto', 1250.00, 'Bullish', 'V'),
+  ('APEXAUTO', 'Apex Automotive', 850.00, 'Neutral', 'A'),
+  ('CRUISER', 'Cruiser Dynamics', 2150.00, 'Bullish', 'C'),
+
+  -- Health Sector
+  ('VITALIS', 'Vitalis Health', 1650.00, 'Bullish', 'V'),
+  ('CAREPLUS', 'CarePlus Hospitals', 3400.00, 'Neutral', 'C'),
+  ('MEDISURG', 'Medisurge Pharma', 920.00, 'Bearish', 'M'),
+
+  -- EdTech Sector
+  ('EDUNEXT', 'EduNext', 540.00, 'Neutral', 'E'),
+  ('SCHOLAR', 'ScholarStream', 890.00, 'Bullish', 'S'),
+  ('BRAINB', 'BrainBoost', 1120.00, 'Bearish', 'B'),
+
+  -- Food Sector
+  ('FRESHC', 'FreshCrave Foods', 430.00, 'Neutral', 'F'),
+  ('SPICER', 'SpiceRoute Dining', 1750.00, 'Bullish', 'S'),
+  ('URBANB', 'UrbanBites', 220.00, 'Bullish', 'U')
 on conflict (symbol) do nothing;
 
 -- ─── Auto-create profile on signup ───

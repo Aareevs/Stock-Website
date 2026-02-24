@@ -122,18 +122,18 @@ const App: React.FC = () => {
 
         // Reset market prices
         const initialPrices: Record<string, number> = {
-          RADIANCE: 2450.0,
-          TCS: 3480.0,
-          HDFCBANK: 1650.0,
-          INFY: 1420.0,
-          ITC: 440.0,
-          SBIN: 620.0,
-          BHARTIARTL: 1180.0,
-          HINDUNILVR: 2520.0,
-          KOTAKBANK: 1780.0,
-          LT: 3200.0,
-          AXISBANK: 1050.0,
-          TATAMOTORS: 680.0,
+          VELOCITY: 1250.0,
+          APEXAUTO: 850.0,
+          CRUISER: 2150.0,
+          VITALIS: 1650.0,
+          CAREPLUS: 3400.0,
+          MEDISURG: 920.0,
+          EDUNEXT: 540.0,
+          SCHOLAR: 890.0,
+          BRAINB: 1120.0,
+          FRESHC: 430.0,
+          SPICER: 1750.0,
+          URBANB: 220.0,
         };
 
         for (const [symbol, price] of Object.entries(initialPrices)) {

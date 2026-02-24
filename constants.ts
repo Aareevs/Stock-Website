@@ -52,18 +52,25 @@ export const METRICS = [
 ];
 
 export const INITIAL_MARKET_ITEMS: MarketItem[] = ([
-  { name: 'Radiance Industries', symbol: 'RADIANCE', price: 2450.00, change: 0, sentiment: 'Bullish' as const, icon: 'R', priceHistory: [] },
-  { name: 'Tantra Consultancy', symbol: 'TANTRA', price: 3800.00, change: 0, sentiment: 'Bullish' as const, icon: 'T', priceHistory: [] },
-  { name: 'Horizon Bank', symbol: 'HRZN', price: 1650.00, change: 0, sentiment: 'Bullish' as const, icon: 'H', priceHistory: [] },
-  { name: 'Infinex', symbol: 'INFNX', price: 1520.00, change: 0, sentiment: 'Neutral' as const, icon: 'I', priceHistory: [] },
-  { name: 'Indica Bank', symbol: 'INDICA', price: 1080.00, change: 0, sentiment: 'Bullish' as const, icon: 'I', priceHistory: [] },
-  { name: 'Bharat Telecom', symbol: 'BHTELE', price: 1420.00, change: 0, sentiment: 'Bullish' as const, icon: 'B', priceHistory: [] },
-  { name: 'Visara Tech', symbol: 'VISARA', price: 480.00, change: 0, sentiment: 'Neutral' as const, icon: 'V', priceHistory: [] },
-  { name: 'Imperial Corp', symbol: 'IMPCORP', price: 440.00, change: 0, sentiment: 'Neutral' as const, icon: 'I', priceHistory: [] },
-  { name: 'Advani Enterprises', symbol: 'ADVANI', price: 2850.00, change: 0, sentiment: 'Bearish' as const, icon: 'A', priceHistory: [] },
-  { name: 'Balaji Finance', symbol: 'BALAJI', price: 6750.00, change: 0, sentiment: 'Bullish' as const, icon: 'B', priceHistory: [] },
-  { name: 'Lakshya Engineering', symbol: 'LAKSHYA', price: 3200.00, change: 0, sentiment: 'Bullish' as const, icon: 'L', priceHistory: [] },
-  { name: 'Ashoka Paints', symbol: 'ASHOKA', price: 2780.00, change: 0, sentiment: 'Neutral' as const, icon: 'A', priceHistory: [] },
+  // Automobile Sector
+  { name: 'Velocity Auto', symbol: 'VELOCITY', price: 1250.00, change: 0, sentiment: 'Bullish' as const, icon: 'V', priceHistory: [] },
+  { name: 'Apex Automotive', symbol: 'APEXAUTO', price: 850.00, change: 0, sentiment: 'Neutral' as const, icon: 'A', priceHistory: [] },
+  { name: 'Cruiser Dynamics', symbol: 'CRUISER', price: 2150.00, change: 0, sentiment: 'Bullish' as const, icon: 'C', priceHistory: [] },
+
+  // Health Sector
+  { name: 'Vitalis Health', symbol: 'VITALIS', price: 1650.00, change: 0, sentiment: 'Bullish' as const, icon: 'V', priceHistory: [] },
+  { name: 'CarePlus Hospitals', symbol: 'CAREPLUS', price: 3400.00, change: 0, sentiment: 'Neutral' as const, icon: 'C', priceHistory: [] },
+  { name: 'Medisurge Pharma', symbol: 'MEDISURG', price: 920.00, change: 0, sentiment: 'Bearish' as const, icon: 'M', priceHistory: [] },
+
+  // EdTech Sector
+  { name: 'EduNext', symbol: 'EDUNEXT', price: 540.00, change: 0, sentiment: 'Neutral' as const, icon: 'E', priceHistory: [] },
+  { name: 'ScholarStream', symbol: 'SCHOLAR', price: 890.00, change: 0, sentiment: 'Bullish' as const, icon: 'S', priceHistory: [] },
+  { name: 'BrainBoost', symbol: 'BRAINB', price: 1120.00, change: 0, sentiment: 'Bearish' as const, icon: 'B', priceHistory: [] },
+
+  // Food Sector
+  { name: 'FreshCrave Foods', symbol: 'FRESHC', price: 430.00, change: 0, sentiment: 'Neutral' as const, icon: 'F', priceHistory: [] },
+  { name: 'SpiceRoute Dining', symbol: 'SPICER', price: 1750.00, change: 0, sentiment: 'Bullish' as const, icon: 'S', priceHistory: [] },
+  { name: 'UrbanBites', symbol: 'URBANB', price: 220.00, change: 0, sentiment: 'Bullish' as const, icon: 'U', priceHistory: [] },
 ]).map(item => ({
   ...item,
   priceHistory: generatePriceHistory(item.price, 200),
