@@ -31,7 +31,15 @@ const App: React.FC = () => {
     executeTrade,
   } = usePortfolio(user?.id);
 
-  const [view, setView] = useState<View>("dashboard");
+  const [view, setViewState] = useState<View>(() => {
+    const saved = localStorage.getItem("vsx_view");
+    return (saved as View) || "dashboard";
+  });
+
+  const setView = (newView: View) => {
+    localStorage.setItem("vsx_view", newView);
+    setViewState(newView);
+  };
 
   // Show loading state
   if (authLoading || marketLoading) {
@@ -183,7 +191,10 @@ const App: React.FC = () => {
       portfolio={portfolio}
       transactions={transactions}
       onExecuteTrade={executeTrade}
-      onLogout={signOut}
+      onLogout={() => {
+        signOut();
+        setView("dashboard");
+      }}
       onOpenAdmin={() => setView(isAdmin ? "admin_dashboard" : "admin_login")}
       isAdmin={isAdmin}
       onRefreshProfile={refreshProfile}
