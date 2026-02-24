@@ -17,6 +17,7 @@ export interface MarketItem {
   price: number;
   change: number;
   sentiment: 'Bullish' | 'Bearish' | 'Neutral';
+  sector: string;
   icon: string;
   priceHistory: StockDataPoint[];
 }

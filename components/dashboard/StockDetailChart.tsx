@@ -36,7 +36,12 @@ export const StockDetailChart: React.FC<StockDetailChartProps> = ({
         </div>
         <div className="flex-1">
           <h1 className="text-2xl font-bold text-textMain">{stock.name}</h1>
-          <span className="text-sm text-textMuted">{stock.symbol}</span>
+          <div className="flex items-center gap-2 mt-1">
+            <span className="text-sm font-medium text-textMuted">{stock.symbol}</span>
+            <span className="px-2 py-0.5 rounded-full bg-surfaceElevated border border-border text-[10px] font-semibold text-textMuted uppercase tracking-wider">
+              {stock.sector}
+            </span>
+          </div>
         </div>
         <div className="text-right">
           <div className="text-3xl font-bold font-mono text-textMain">

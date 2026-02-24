@@ -53,24 +53,24 @@ export const METRICS = [
 
 export const INITIAL_MARKET_ITEMS: MarketItem[] = ([
   // Automobile Sector
-  { name: 'Velocity Auto', symbol: 'VELOCITY', price: 1250.00, change: 0, sentiment: 'Bullish' as const, icon: 'V', priceHistory: [] },
-  { name: 'Apex Automotive', symbol: 'APEXAUTO', price: 850.00, change: 0, sentiment: 'Neutral' as const, icon: 'A', priceHistory: [] },
-  { name: 'Cruiser Dynamics', symbol: 'CRUISER', price: 2150.00, change: 0, sentiment: 'Bullish' as const, icon: 'C', priceHistory: [] },
+  { name: 'Velocity Auto', symbol: 'VELOCITY', price: 1250.00, change: 0, sentiment: 'Bullish' as const, sector: 'Automobile', icon: 'V', priceHistory: [] },
+  { name: 'Apex Automotive', symbol: 'APEXAUTO', price: 850.00, change: 0, sentiment: 'Neutral' as const, sector: 'Automobile', icon: 'A', priceHistory: [] },
+  { name: 'Cruiser Dynamics', symbol: 'CRUISER', price: 2150.00, change: 0, sentiment: 'Bullish' as const, sector: 'Automobile', icon: 'C', priceHistory: [] },
 
   // Health Sector
-  { name: 'Vitalis Health', symbol: 'VITALIS', price: 1650.00, change: 0, sentiment: 'Bullish' as const, icon: 'V', priceHistory: [] },
-  { name: 'CarePlus Hospitals', symbol: 'CAREPLUS', price: 3400.00, change: 0, sentiment: 'Neutral' as const, icon: 'C', priceHistory: [] },
-  { name: 'Medisurge Pharma', symbol: 'MEDISURG', price: 920.00, change: 0, sentiment: 'Bearish' as const, icon: 'M', priceHistory: [] },
+  { name: 'Vitalis Health', symbol: 'VITALIS', price: 1650.00, change: 0, sentiment: 'Bullish' as const, sector: 'Health', icon: 'V', priceHistory: [] },
+  { name: 'CarePlus Hospitals', symbol: 'CAREPLUS', price: 3400.00, change: 0, sentiment: 'Neutral' as const, sector: 'Health', icon: 'C', priceHistory: [] },
+  { name: 'Medisurge Pharma', symbol: 'MEDISURG', price: 920.00, change: 0, sentiment: 'Bearish' as const, sector: 'Health', icon: 'M', priceHistory: [] },
 
   // EdTech Sector
-  { name: 'EduNext', symbol: 'EDUNEXT', price: 540.00, change: 0, sentiment: 'Neutral' as const, icon: 'E', priceHistory: [] },
-  { name: 'ScholarStream', symbol: 'SCHOLAR', price: 890.00, change: 0, sentiment: 'Bullish' as const, icon: 'S', priceHistory: [] },
-  { name: 'BrainBoost', symbol: 'BRAINB', price: 1120.00, change: 0, sentiment: 'Bearish' as const, icon: 'B', priceHistory: [] },
+  { name: 'EduNext', symbol: 'EDUNEXT', price: 540.00, change: 0, sentiment: 'Neutral' as const, sector: 'EdTech', icon: 'E', priceHistory: [] },
+  { name: 'ScholarStream', symbol: 'SCHOLAR', price: 890.00, change: 0, sentiment: 'Bullish' as const, sector: 'EdTech', icon: 'S', priceHistory: [] },
+  { name: 'BrainBoost', symbol: 'BRAINB', price: 1120.00, change: 0, sentiment: 'Bearish' as const, sector: 'EdTech', icon: 'B', priceHistory: [] },
 
   // Food Sector
-  { name: 'FreshCrave Foods', symbol: 'FRESHC', price: 430.00, change: 0, sentiment: 'Neutral' as const, icon: 'F', priceHistory: [] },
-  { name: 'SpiceRoute Dining', symbol: 'SPICER', price: 1750.00, change: 0, sentiment: 'Bullish' as const, icon: 'S', priceHistory: [] },
-  { name: 'UrbanBites', symbol: 'URBANB', price: 220.00, change: 0, sentiment: 'Bullish' as const, icon: 'U', priceHistory: [] },
+  { name: 'FreshCrave Foods', symbol: 'FRESHC', price: 430.00, change: 0, sentiment: 'Neutral' as const, sector: 'Food', icon: 'F', priceHistory: [] },
+  { name: 'SpiceRoute Dining', symbol: 'SPICER', price: 1750.00, change: 0, sentiment: 'Bullish' as const, sector: 'Food', icon: 'S', priceHistory: [] },
+  { name: 'UrbanBites', symbol: 'URBANB', price: 220.00, change: 0, sentiment: 'Bullish' as const, sector: 'Food', icon: 'U', priceHistory: [] },
 ]).map(item => ({
   ...item,
   priceHistory: generatePriceHistory(item.price, 200),

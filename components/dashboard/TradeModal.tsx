@@ -48,7 +48,12 @@ export const TradeModal: React.FC<TradeModalProps> = ({
             <h3 className="text-lg font-bold text-textMain flex items-center gap-2">
               Trade {asset.symbol}
             </h3>
-            <span className="text-xs text-textMuted">{asset.name}</span>
+            <div className="flex items-center gap-2 mt-1">
+              <span className="text-xs font-medium text-textMuted">{asset.name}</span>
+              <span className="px-2 py-0.5 rounded-full bg-surfaceElevated border border-border text-[10px] font-semibold text-textMuted uppercase tracking-wider">
+                {asset.sector}
+              </span>
+            </div>
           </div>
           <button onClick={onClose} className="text-textMuted hover:text-textMain"><X className="w-5 h-5" /></button>
         </div>

@@ -356,8 +356,13 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
                           <div className="font-semibold text-textMain">
                             {item.name}
                           </div>
-                          <div className="text-xs text-textMuted">
-                            {item.symbol}
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <span className="text-xs font-medium text-textMuted">
+                              {item.symbol}
+                            </span>
+                            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-surfaceElevated border border-border text-textMuted">
+                              {item.sector}
+                            </span>
                           </div>
                         </div>
                       </div>

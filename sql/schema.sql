@@ -35,6 +35,7 @@ create table if not exists market_items (
   price numeric not null,
   change numeric not null default 0,
   sentiment text not null default 'Neutral',
+  sector text not null,
   icon text not null default '',
   price_history jsonb not null default '[]',
   updated_at timestamptz default now()
@@ -136,26 +137,26 @@ create policy "Users can insert transactions"
   on transactions for insert with check (auth.uid() = user_id);
 
 -- ─── Seed Market Data ───
-insert into market_items (symbol, name, price, sentiment, icon) values
+insert into market_items (symbol, name, price, sentiment, sector, icon) values
   -- Automobile Sector
-  ('VELOCITY', 'Velocity Auto', 1250.00, 'Bullish', 'V'),
-  ('APEXAUTO', 'Apex Automotive', 850.00, 'Neutral', 'A'),
-  ('CRUISER', 'Cruiser Dynamics', 2150.00, 'Bullish', 'C'),
+  ('VELOCITY', 'Velocity Auto', 1250.00, 'Bullish', 'Automobile', 'V'),
+  ('APEXAUTO', 'Apex Automotive', 850.00, 'Neutral', 'Automobile', 'A'),
+  ('CRUISER', 'Cruiser Dynamics', 2150.00, 'Bullish', 'Automobile', 'C'),
 
   -- Health Sector
-  ('VITALIS', 'Vitalis Health', 1650.00, 'Bullish', 'V'),
-  ('CAREPLUS', 'CarePlus Hospitals', 3400.00, 'Neutral', 'C'),
-  ('MEDISURG', 'Medisurge Pharma', 920.00, 'Bearish', 'M'),
+  ('VITALIS', 'Vitalis Health', 1650.00, 'Bullish', 'Health', 'V'),
+  ('CAREPLUS', 'CarePlus Hospitals', 3400.00, 'Neutral', 'Health', 'C'),
+  ('MEDISURG', 'Medisurge Pharma', 920.00, 'Bearish', 'Health', 'M'),
 
   -- EdTech Sector
-  ('EDUNEXT', 'EduNext', 540.00, 'Neutral', 'E'),
-  ('SCHOLAR', 'ScholarStream', 890.00, 'Bullish', 'S'),
-  ('BRAINB', 'BrainBoost', 1120.00, 'Bearish', 'B'),
+  ('EDUNEXT', 'EduNext', 540.00, 'Neutral', 'EdTech', 'E'),
+  ('SCHOLAR', 'ScholarStream', 890.00, 'Bullish', 'EdTech', 'S'),
+  ('BRAINB', 'BrainBoost', 1120.00, 'Bearish', 'EdTech', 'B'),
 
   -- Food Sector
-  ('FRESHC', 'FreshCrave Foods', 430.00, 'Neutral', 'F'),
-  ('SPICER', 'SpiceRoute Dining', 1750.00, 'Bullish', 'S'),
-  ('URBANB', 'UrbanBites', 220.00, 'Bullish', 'U')
+  ('FRESHC', 'FreshCrave Foods', 430.00, 'Neutral', 'Food', 'F'),
+  ('SPICER', 'SpiceRoute Dining', 1750.00, 'Bullish', 'Food', 'S'),
+  ('URBANB', 'UrbanBites', 220.00, 'Bullish', 'Food', 'U')
 on conflict (symbol) do nothing;
 
 -- ─── Auto-create profile on signup ───
