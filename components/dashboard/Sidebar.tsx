@@ -53,9 +53,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <button
             key={item.label}
             onClick={() => setActiveTab(item.label)}
-            className={`w-full flex items-center gap-3 px-3 py-3 rounded-lg transition-all duration-200 group ${
+            className={`w-full flex items-center gap-3 px-3 py-3 rounded-lg transition-all duration-200 group focus:outline-none ${
               activeTab === item.label
-                ? "bg-surfaceElevated text-primary border border-border"
+                ? "bg-surfaceElevated text-primary"
                 : "text-textMuted hover:text-textMain hover:bg-surface/50"
             }`}
           >
