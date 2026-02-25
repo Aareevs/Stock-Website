@@ -5,6 +5,21 @@ import { StockChart } from './Charts';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 
+const COMPANY_LOGOS: Record<string, string> = {
+  VELOCITY: "/VelocityAuto.png",
+  APEXAUTO: "/ApexAutomotive.png",
+  CRUISER: "/CruiserDynamics.png",
+  VITALIS: "/VitalisHealth.png",
+  CAREPLUS: "/CarePlus.png",
+  MEDISURG: "/Medisurge Pharma.png",
+  EDUNEXT: "/EduNext.png",
+  SCHOLAR: "/ScholarStream.png",
+  BRAINB: "/BrainBoost.png",
+  FRESHC: "/FreshCrave Foods.png",
+  SPICER: "/SpiceRoute Dining.png",
+  URBANB: "/UrbanBites.png",
+};
+
 interface StockDetailChartProps {
   stock: MarketItem;
   onBack: () => void;
@@ -31,8 +46,8 @@ export const StockDetailChart: React.FC<StockDetailChartProps> = ({
         <button onClick={onBack} className="p-2 rounded-lg hover:bg-surfaceElevated transition-colors">
           <ArrowLeft className="w-5 h-5 text-textMuted" />
         </button>
-        <div className="w-12 h-12 rounded-full bg-surfaceElevated border border-border flex items-center justify-center text-xl font-bold text-primary">
-          {stock.icon}
+        <div className="w-12 h-12 rounded-full bg-surfaceElevated border border-border flex items-center justify-center overflow-hidden">
+          <img src={COMPANY_LOGOS[stock.symbol] || ""} alt={stock.name} className="w-full h-full object-cover" />
         </div>
         <div className="flex-1">
           <h1 className="text-2xl font-bold text-textMain">{stock.name}</h1>

@@ -197,25 +197,7 @@ export const UserLogin: React.FC<UserLoginProps> = ({ onOpenAdmin }) => {
             </div>
           </div>
 
-          {/* Decorative SVG stock-chart lines */}
-          <div className="relative h-20 mt-6 opacity-30">
-            <svg viewBox="0 0 400 80" className="w-full h-full">
-              <path
-                d="M0,60 Q50,40 100,50 T200,30 T300,45 T400,20"
-                fill="none"
-                stroke="#1ED3A6"
-                strokeWidth="2"
-                className="animate-pulse"
-              />
-              <path
-                d="M0,70 Q80,50 150,60 T250,40 T350,55 T400,35"
-                fill="none"
-                stroke="#1ED3A6"
-                strokeWidth="1"
-                opacity="0.5"
-              />
-            </svg>
-          </div>
+
         </div>
       </div>
 

@@ -27,6 +27,22 @@ import type { MarketItem } from "../../hooks/useMarket";
 import type { NewsEvent } from "../../hooks/useNews";
 import type { PortfolioItem, Transaction } from "../../hooks/usePortfolio";
 
+// Map company symbols to their logo filenames in /public
+const COMPANY_LOGOS: Record<string, string> = {
+  VELOCITY: "/VelocityAuto.png",
+  APEXAUTO: "/ApexAutomotive.png",
+  CRUISER: "/CruiserDynamics.png",
+  VITALIS: "/VitalisHealth.png",
+  CAREPLUS: "/CarePlus.png",
+  MEDISURG: "/Medisurge Pharma.png",
+  EDUNEXT: "/EduNext.png",
+  SCHOLAR: "/ScholarStream.png",
+  BRAINB: "/BrainBoost.png",
+  FRESHC: "/FreshCrave Foods.png",
+  SPICER: "/SpiceRoute Dining.png",
+  URBANB: "/UrbanBites.png",
+};
+
 interface DashboardLayoutProps {
   profile: Profile;
   marketItems: MarketItem[];
@@ -195,13 +211,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
         </div>
 
         {/* Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-          <Card className="bg-gradient-to-br from-surface to-surfaceElevated">
-            <h3 className="text-sm text-textMuted mb-1">Cash Balance</h3>
-            <div className="text-2xl font-bold font-mono">
-              ₹{balance.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
-            </div>
-          </Card>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
           <Card className="bg-gradient-to-br from-surface to-surfaceElevated">
             <h3 className="text-sm text-textMuted mb-1">Stock Value</h3>
             <div className="text-2xl font-bold font-mono">
@@ -235,8 +245,8 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
                 onClick={() => setSelectedStock(item)}
               >
                 <div className="flex items-center gap-3 mb-2">
-                  <div className="w-8 h-8 rounded-full bg-surfaceElevated border border-border flex items-center justify-center font-bold text-primary">
-                    {item.icon}
+                  <div className="w-8 h-8 rounded-full bg-surfaceElevated border border-border flex items-center justify-center overflow-hidden">
+                    <img src={COMPANY_LOGOS[item.symbol] || ""} alt={item.name} className="w-full h-full object-cover" />
                   </div>
                   <div>
                     <div className="font-semibold text-textMain">
@@ -349,8 +359,8 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
                         className="flex items-center gap-3 cursor-pointer"
                         onClick={() => setSelectedStock(item)}
                       >
-                        <div className="w-10 h-10 rounded-full bg-surfaceElevated border border-border flex items-center justify-center font-bold text-primary transition-transform group-hover:scale-110">
-                          {item.icon}
+                        <div className="w-10 h-10 rounded-full bg-surfaceElevated border border-border flex items-center justify-center overflow-hidden transition-transform group-hover:scale-110">
+                          <img src={COMPANY_LOGOS[item.symbol] || ""} alt={item.name} className="w-full h-full object-cover" />
                         </div>
                         <div>
                           <div className="font-semibold text-textMain">
@@ -531,8 +541,8 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
                       >
                         <td className="py-4 pl-2">
                           <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-full bg-surfaceElevated border border-border flex items-center justify-center font-bold text-textMain">
-                              {item.symbol?.[0] ?? "?"}
+                            <div className="w-8 h-8 rounded-full bg-surfaceElevated border border-border flex items-center justify-center overflow-hidden">
+                              <img src={COMPANY_LOGOS[item.symbol] || ""} alt={item.symbol} className="w-full h-full object-cover" />
                             </div>
                             <div>
                               <div className="font-semibold text-textMain">
