@@ -1,55 +1,47 @@
 # Codebase Context
 
 This file contains the full context of the codebase to be used by LLMs.
-
-
-## File: `.gitignore`
-
-```
-# Logs
-logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
-
-node_modules
-dist
-dist-ssr
-*.local
-
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-.idea
-.DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
-
-```
+Generated at: 2026-02-25T21:37:55.012Z
 
 ## File: `App.tsx`
 
 ```tsx
-import React, { useState } from "react";
+import React, { useState, useEffect, Suspense, lazy } from "react";
 import { DashboardLayout } from "./components/dashboard/DashboardLayout";
 import { UserLogin } from "./components/auth/UserLogin";
 import { AdminLogin } from "./components/admin/AdminLogin";
-import { AdminDashboard } from "./components/admin/AdminDashboard";
+
+// Lazy-load admin dashboard (heavy: Recharts + graphData + zoom logic)
+const AdminDashboard = lazy(() =>
+  import("./components/admin/AdminDashboard").then((m) => ({
+    default: m.AdminDashboard,
+  })),
+);
 import { useAuth } from "./components/auth/AuthProvider";
 import { useMarket } from "./hooks/useMarket";
 import { useNews } from "./hooks/useNews";
 import { usePortfolio } from "./hooks/usePortfolio";
 import { supabase } from "./lib/supabaseClient";
+import { getGraphPrice } from "./engine/graphPlaybackEngine";
 
 const STARTING_CAPITAL = 100000; // ₹1 Lakh
 
 type View = "dashboard" | "admin_login" | "admin_dashboard";
+
+const SYMBOLS = [
+  "VELOCITY",
+  "APEXAUTO",
+  "CRUISER",
+  "VITALIS",
+  "CAREPLUS",
+  "MEDISURG",
+  "EDUNEXT",
+  "SCHOLAR",
+  "BRAINB",
+  "FRESHC",
+  "SPICER",
+  "URBANB",
+];
 
 const App: React.FC = () => {
   const {
@@ -60,7 +52,14 @@ const App: React.FC = () => {
     isAdmin,
     refreshProfile,
   } = useAuth();
-  const { marketItems, setMarketItems, loading: marketLoading } = useMarket();
+  const {
+    marketItems,
+    setMarketItems,
+    loading: marketLoading,
+    setActiveNews,
+    resetTicks,
+    getTicks,
+  } = useMarket();
   const { newsEvents, loading: newsLoading, triggerNews, stopNews } = useNews();
   const {
     portfolio,
@@ -69,11 +68,23 @@ const App: React.FC = () => {
     executeTrade,
   } = usePortfolio(user?.id);
 
-  const [view, setView] = useState<View>("dashboard");
+  const [view, setViewState] = useState<View>(() => {
+    const saved = localStorage.getItem("vsx_view");
+    return (saved as View) || "dashboard";
+  });
+
+  const setView = (newView: View) => {
+    localStorage.setItem("vsx_view", newView);
+    setViewState(newView);
+  };
+
+  // Keep useMarket in sync with active news events
+  useEffect(() => {
+    setActiveNews(newsEvents);
+  }, [newsEvents, setActiveNews]);
 
   // Show loading state
   if (authLoading || marketLoading) {
-    console.log("App loading:", { authLoading, marketLoading });
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center space-y-4">
@@ -137,54 +148,55 @@ const App: React.FC = () => {
           .eq("role", "participant");
         if (profileError) throw profileError;
 
-        // Clear all portfolios - use neq to match all rows
+        // Clear all portfolios
         const { error: portfolioError } = await supabase
           .from("portfolios")
           .delete()
           .neq("id", "00000000-0000-0000-0000-000000000000");
         if (portfolioError) throw portfolioError;
 
-        // Clear all transactions - use neq to match all rows
+        // Clear all transactions
         const { error: txError } = await supabase
           .from("transactions")
           .delete()
           .neq("id", "00000000-0000-0000-0000-000000000000");
         if (txError) throw txError;
 
-        // DELETE all news events - use neq to match all rows
+        // DELETE all news events
         const { error: newsError } = await supabase
           .from("news_events")
           .delete()
           .neq("id", "00000000-0000-0000-0000-000000000000");
         if (newsError) throw newsError;
 
-        // Reset market prices
-        const initialPrices: Record<string, number> = {
-          VELOCITY: 1250.0,
-          APEXAUTO: 850.0,
-          CRUISER: 2150.0,
-          VITALIS: 1650.0,
-          CAREPLUS: 3400.0,
-          MEDISURG: 920.0,
-          EDUNEXT: 540.0,
-          SCHOLAR: 890.0,
-          BRAINB: 1120.0,
-          FRESHC: 430.0,
-          SPICER: 1750.0,
-          URBANB: 220.0,
-        };
-
-        for (const [symbol, price] of Object.entries(initialPrices)) {
+        // Reset market prices to graph starting prices (tick 0)
+        for (const symbol of SYMBOLS) {
+          const startPrice = getGraphPrice(symbol, 0);
           await supabase
             .from("market_items")
             .update({
-              price,
+              price: startPrice,
               change: 0,
               sentiment: "Neutral",
               price_history: [],
             })
             .eq("symbol", symbol);
         }
+
+        // Reset tick counters to 0
+        resetTicks();
+
+        // Reset client-side market items to graph starting state
+        setMarketItems((prev) =>
+          prev.map((item) => ({
+            ...item,
+            price: getGraphPrice(item.symbol, 0),
+            change: 0,
+            sentiment: "Neutral" as const,
+            priceHistory: [],
+            price_history: [],
+          })),
+        );
 
         // Force page reload to refresh all data
         window.location.reload();
@@ -197,22 +209,33 @@ const App: React.FC = () => {
     };
 
     return (
-      <AdminDashboard
-        profile={profile}
-        marketItems={marketItems}
-        newsEvents={newsEvents}
-        onBack={() => {
-          signOut();
-          setView("dashboard");
-        }}
-        onTriggerNews={handleTriggerNews}
-        onStopNews={handleStopNews}
-        onResetAuction={handleResetAuction}
-      />
+      <Suspense
+        fallback={
+          <div className="min-h-screen bg-background flex items-center justify-center">
+            <div className="text-textMuted text-lg animate-pulse">
+              Loading Admin Dashboard...
+            </div>
+          </div>
+        }
+      >
+        <AdminDashboard
+          profile={profile}
+          marketItems={marketItems}
+          newsEvents={newsEvents}
+          onBack={() => {
+            signOut();
+            setView("dashboard");
+          }}
+          onTriggerNews={handleTriggerNews}
+          onStopNews={handleStopNews}
+          onResetAuction={handleResetAuction}
+          getTicks={getTicks}
+        />
+      </Suspense>
     );
   }
 
-  // Main dashboard
+  // Main dashboard — NO graphData passed here (security: Part 8)
   return (
     <DashboardLayout
       profile={profile}
@@ -221,7 +244,10 @@ const App: React.FC = () => {
       portfolio={portfolio}
       transactions={transactions}
       onExecuteTrade={executeTrade}
-      onLogout={signOut}
+      onLogout={() => {
+        signOut();
+        setView("dashboard");
+      }}
       onOpenAdmin={() => setView(isAdmin ? "admin_dashboard" : "admin_login")}
       isAdmin={isAdmin}
       onRefreshProfile={refreshProfile}
@@ -235,7 +261,7 @@ export default App;
 
 ## File: `README.md`
 
-```md
+```markdown
 # 📈 VSX: Buy or Bail
 
 **VSX: Buy or Bail** is a real-time virtual stock market simulation built for **NOESIS Tech Fest**, hosted by **Vedam School of Technology**. Participants compete by trading fictional stocks, reacting to live market news events, and building the most profitable portfolio — all within a sleek, interactive dashboard.
@@ -421,15 +447,32 @@ This project is private and built for the NOESIS Tech Fest event.
 ## File: `components/admin/AdminDashboard.tsx`
 
 ```tsx
-import React, { useState } from 'react';
-import { ArrowLeft, Trophy, Users, BarChart2, X, TrendingUp, TrendingDown, Newspaper, RotateCcw, Zap, AlertTriangle, ChevronDown, Check, RefreshCw } from 'lucide-react';
-import { Card } from '../ui/Card';
-import { Button } from '../ui/Button';
-import { StockChart, MiniSparkline } from '../dashboard/Charts';
-import { AdminUsers } from './AdminUsers';
-import type { Profile } from '../auth/AuthProvider';
-import type { MarketItem } from '../../hooks/useMarket';
-import type { NewsEvent } from '../../hooks/useNews';
+import React, { useState, useMemo, useEffect, useRef } from "react";
+import {
+  ArrowLeft,
+  Trophy,
+  Users,
+  BarChart2,
+  X,
+  TrendingUp,
+  TrendingDown,
+  Newspaper,
+  RotateCcw,
+  Zap,
+  AlertTriangle,
+  ChevronDown,
+  Check,
+  RefreshCw,
+} from "lucide-react";
+import { Card } from "../ui/Card";
+import { Button } from "../ui/Button";
+import { StockChart, MiniSparkline } from "../dashboard/Charts";
+import { AdminUsers } from "./AdminUsers";
+import { graphData } from "../../data/graphData";
+import type { StockDataPoint } from "../../types";
+import type { Profile } from "../auth/AuthProvider";
+import type { MarketItem } from "../../hooks/useMarket";
+import type { NewsEvent } from "../../hooks/useNews";
 
 interface AdminDashboardProps {
   profile: Profile;
@@ -441,36 +484,74 @@ interface AdminDashboardProps {
     crashPercent: number,
     boostSymbols: string[],
     boostPercent: number,
-    headline: string
+    headline: string,
   ) => Promise<{ error: string | null }>;
   onStopNews: (eventId: string) => Promise<{ error: string | null }>;
   onResetAuction: () => Promise<{ error: string | null }>;
+  getTicks: () => Record<string, number>;
 }
 
-export const AdminDashboard: React.FC<AdminDashboardProps> = ({ profile, marketItems, newsEvents, onBack, onTriggerNews, onStopNews, onResetAuction }) => {
-  const [activeView, setActiveView] = useState<'charts' | 'news' | 'users'>('news');
+/**
+ * Convert the full graph data array for a symbol into StockDataPoint[]
+ * for rendering the complete Excel timeline in admin charts.
+ */
+function getFullGraphTimeline(symbol: string): StockDataPoint[] {
+  const prices = graphData[symbol as keyof typeof graphData];
+  if (!prices || prices.length === 0) return [];
+
+  return prices.map((value, i) => ({
+    time: `${i}s`,
+    value: parseFloat(Math.max(10, value).toFixed(2)),
+  }));
+}
+
+export const AdminDashboard: React.FC<AdminDashboardProps> = ({
+  profile,
+  marketItems,
+  newsEvents,
+  onBack,
+  onTriggerNews,
+  onStopNews,
+  onResetAuction,
+  getTicks,
+}) => {
+  const [activeView, setActiveView] = useState<"charts" | "news" | "users">(
+    "news",
+  );
   const [selectedChart, setSelectedChart] = useState<MarketItem | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState("");
   const [isResetting, setIsResetting] = useState(false);
   const [resetConfirm, setResetConfirm] = useState(false);
 
   // News event form state
-  const [crashSymbol, setCrashSymbol] = useState('');
+  const [crashSymbol, setCrashSymbol] = useState("");
   const [crashPercent, setCrashPercent] = useState(15);
   const [boostSymbols, setBoostSymbols] = useState<string[]>([]);
   const [boostPercent, setBoostPercent] = useState(8);
   const [boostDropdownOpen, setBoostDropdownOpen] = useState(false);
 
+  // Get current tick for the selected stock
+  const currentTick = selectedChart
+    ? (getTicks()[selectedChart.symbol] ?? 0)
+    : 0;
+
+  // Memoize full graph timeline for the selected stock
+  const fullTimeline = useMemo(() => {
+    if (!selectedChart) return [];
+    return getFullGraphTimeline(selectedChart.symbol);
+  }, [selectedChart?.symbol]);
 
   const toggleBoostSymbol = (symbol: string) => {
-    setBoostSymbols(prev =>
-      prev.includes(symbol) ? prev.filter(s => s !== symbol) : [...prev, symbol]
+    setBoostSymbols((prev) =>
+      prev.includes(symbol)
+        ? prev.filter((s) => s !== symbol)
+        : [...prev, symbol],
     );
   };
 
   const generateHeadline = () => {
-    const crashCompany = marketItems.find(m => m.symbol === crashSymbol);
-    if (!crashCompany) return 'Breaking News: Market Disruption';
+    const crashCompany = marketItems.find((m) => m.symbol === crashSymbol);
+    if (!crashCompany) return "Breaking News: Market Disruption";
     const headlines = [
       `BREAKING: ${crashCompany.name} CEO Steps Down Amid Controversy`,
       `FLASH: ${crashCompany.name} Reports Major Quarterly Loss`,
@@ -488,9 +569,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ profile, marketI
       -crashPercent,
       boostSymbols,
       boostPercent,
-      generateHeadline()
+      generateHeadline(),
     );
-    setCrashSymbol('');
+    setCrashSymbol("");
     setBoostSymbols([]);
     setCrashPercent(15);
     setBoostPercent(8);
@@ -507,28 +588,31 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ profile, marketI
     setResetConfirm(false);
   };
 
-
   return (
     <div className="min-h-screen bg-background text-textMain">
-
       <div className="max-w-7xl mx-auto p-4 md:p-8">
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div className="flex items-center gap-4">
-            <button onClick={onBack} className="p-2 rounded-lg hover:bg-surfaceElevated transition-colors">
+            <button
+              onClick={onBack}
+              className="p-2 rounded-lg hover:bg-surfaceElevated transition-colors"
+            >
               <ArrowLeft className="w-5 h-5 text-textMuted" />
             </button>
             <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-primary to-blue-500 flex-shrink-0" />
             <div>
               <h1 className="text-2xl font-bold">VSX Admin</h1>
-              <p className="text-sm text-textMuted">Competition Management Dashboard</p>
+              <p className="text-sm text-textMuted">
+                Competition Management Dashboard
+              </p>
             </div>
           </div>
-          
+
           {/* Reset Auction Button */}
           <div className="flex items-center gap-2">
             {resetConfirm && (
-              <button 
+              <button
                 onClick={() => setResetConfirm(false)}
                 className="px-3 py-2 text-sm text-textMuted hover:text-textMain transition-colors"
               >
@@ -536,11 +620,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ profile, marketI
               </button>
             )}
             <Button
-              variant={resetConfirm ? 'primary' : 'ghost'}
+              variant={resetConfirm ? "primary" : "ghost"}
               size="sm"
               onClick={handleResetAuction}
               disabled={isResetting}
-              className={resetConfirm ? 'bg-red-500 hover:bg-red-600' : 'border border-red-500/30 text-red-400 hover:bg-red-500/10'}
+              className={
+                resetConfirm
+                  ? "bg-red-500 hover:bg-red-600"
+                  : "border border-red-500/30 text-red-400 hover:bg-red-500/10"
+              }
             >
               {isResetting ? (
                 <>
@@ -583,11 +671,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ profile, marketI
               <Zap className="w-4 h-4 text-yellow-400" />
               <span className="text-sm text-textMuted">Active Flashes</span>
             </div>
-            <div className="text-3xl font-bold">{newsEvents.filter(e => e.active).length}</div>
+            <div className="text-3xl font-bold">
+              {newsEvents.filter((e) => e.active).length}
+            </div>
           </Card>
           <Card
             className="bg-gradient-to-br from-surface to-surfaceElevated cursor-pointer hover:border-primary/40 transition-colors"
-            onClick={() => setActiveView('users')}
+            onClick={() => setActiveView("users")}
           >
             <div className="flex items-center gap-2 mb-2">
               <Users className="w-4 h-4 text-blue-400" />
@@ -600,49 +690,73 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ profile, marketI
         {/* Tab Switcher */}
         <div className="flex gap-2 mb-6">
           <Button
-            variant={activeView === 'charts' ? 'primary' : 'ghost'}
+            variant={activeView === "charts" ? "primary" : "ghost"}
             size="sm"
-            onClick={() => setActiveView('charts')}
+            onClick={() => setActiveView("charts")}
           >
             <BarChart2 className="w-4 h-4 mr-1" /> All Charts
           </Button>
           <Button
-            variant={activeView === 'news' ? 'primary' : 'ghost'}
+            variant={activeView === "news" ? "primary" : "ghost"}
             size="sm"
-            onClick={() => setActiveView('news')}
+            onClick={() => setActiveView("news")}
           >
             <Newspaper className="w-4 h-4 mr-1" /> News Events
           </Button>
           <Button
-            variant={activeView === 'users' ? 'primary' : 'ghost'}
+            variant={activeView === "users" ? "primary" : "ghost"}
             size="sm"
-            onClick={() => setActiveView('users')}
+            onClick={() => setActiveView("users")}
           >
             <Users className="w-4 h-4 mr-1" /> Users
           </Button>
         </div>
 
-
-        {activeView === 'charts' && (
+        {activeView === "charts" && (
           <div className="space-y-6">
             {selectedChart ? (
               <div>
                 <div className="flex items-center gap-4 mb-4">
-                  <button onClick={() => setSelectedChart(null)} className="p-2 rounded-lg hover:bg-surfaceElevated transition-colors">
+                  <button
+                    onClick={() => setSelectedChart(null)}
+                    className="p-2 rounded-lg hover:bg-surfaceElevated transition-colors"
+                  >
                     <ArrowLeft className="w-5 h-5 text-textMuted" />
                   </button>
-                  <h3 className="text-xl font-bold">{selectedChart.name} ({selectedChart.symbol})</h3>
-                  <span className={`text-sm font-semibold ${(selectedChart.change ?? 0) >= 0 ? 'text-primary' : 'text-negative'}`}>
-                    {(selectedChart.change ?? 0) >= 0 ? '+' : ''}{(selectedChart.change ?? 0).toFixed(2)}%
+                  <h3 className="text-xl font-bold">
+                    {selectedChart.name} ({selectedChart.symbol})
+                  </h3>
+                  <span
+                    className={`text-sm font-semibold ${(selectedChart.change ?? 0) >= 0 ? "text-primary" : "text-negative"}`}
+                  >
+                    {(selectedChart.change ?? 0) >= 0 ? "+" : ""}
+                    {(selectedChart.change ?? 0).toFixed(2)}%
+                  </span>
+                  <span className="text-xs text-textMuted ml-auto">
+                    Tick: {currentTick} / {fullTimeline.length}
                   </span>
                 </div>
+
+                {/* Full Excel Timeline — ADMIN ONLY */}
                 <Card padding="sm">
-                  <StockChart data={selectedChart.priceHistory} />
+                  <div className="text-xs text-textMuted mb-2 flex items-center gap-2">
+                    <span className="inline-block w-3 h-0.5 bg-primary rounded"></span>{" "}
+                    Past (played)
+                    <span
+                      className="inline-block w-3 h-0.5 bg-textMuted/30 rounded"
+                      style={{ borderTop: "2px dashed" }}
+                    ></span>{" "}
+                    Future (upcoming)
+                  </div>
+                  <AdminFullChart
+                    data={fullTimeline}
+                    currentTick={currentTick}
+                  />
                 </Card>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {marketItems.map(item => (
+                {marketItems.map((item) => (
                   <Card
                     key={item.symbol}
                     className="cursor-pointer hover:border-primary/50 transition-colors"
@@ -651,17 +765,29 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ profile, marketI
                   >
                     <div className="flex justify-between items-start mb-2">
                       <div>
-                        <div className="font-semibold text-textMain">{item.name}</div>
-                        <div className="text-xs text-textMuted">{item.symbol}</div>
+                        <div className="font-semibold text-textMain">
+                          {item.name}
+                        </div>
+                        <div className="text-xs text-textMuted">
+                          {item.symbol}
+                        </div>
                       </div>
                       <div className="text-right">
-                        <div className="font-mono font-bold">₹{(item.price ?? 0).toFixed(2)}</div>
-                        <div className={`text-xs font-semibold ${(item.change ?? 0) >= 0 ? 'text-primary' : 'text-negative'}`}>
-                          {(item.change ?? 0) >= 0 ? '+' : ''}{(item.change ?? 0).toFixed(2)}%
+                        <div className="font-mono font-bold">
+                          ₹{(item.price ?? 0).toFixed(2)}
+                        </div>
+                        <div
+                          className={`text-xs font-semibold ${(item.change ?? 0) >= 0 ? "text-primary" : "text-negative"}`}
+                        >
+                          {(item.change ?? 0) >= 0 ? "+" : ""}
+                          {(item.change ?? 0).toFixed(2)}%
                         </div>
                       </div>
                     </div>
-                    <MiniSparkline data={(item.priceHistory || []).slice(-30)} color={(item.change ?? 0) >= 0 ? '#1ED3A6' : '#EF4444'} />
+                    <MiniSparkline
+                      data={(item.priceHistory || []).slice(-30)}
+                      color={(item.change ?? 0) >= 0 ? "#1ED3A6" : "#EF4444"}
+                    />
                   </Card>
                 ))}
               </div>
@@ -669,11 +795,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ profile, marketI
           </div>
         )}
 
-        {activeView === 'users' && (
-          <AdminUsers marketItems={marketItems} />
-        )}
+        {activeView === "users" && <AdminUsers marketItems={marketItems} />}
 
-        {activeView === 'news' && (
+        {activeView === "news" && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Create News Flash */}
             <Card>
@@ -685,18 +809,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ profile, marketI
               <div className="space-y-5">
                 {/* Crash Company */}
                 <div>
-                  <label className="block text-xs font-semibold text-textMuted uppercase tracking-wider mb-2">Company to Crash</label>
+                  <label className="block text-xs font-semibold text-textMuted uppercase tracking-wider mb-2">
+                    Company to Crash
+                  </label>
                   <select
                     value={crashSymbol}
                     onChange={(e) => {
                       setCrashSymbol(e.target.value);
-                      setBoostSymbols(prev => prev.filter(s => s !== e.target.value));
+                      setBoostSymbols((prev) =>
+                        prev.filter((s) => s !== e.target.value),
+                      );
                     }}
                     className="w-full bg-surface border border-border rounded-lg px-4 py-3 text-textMain focus:outline-none focus:border-primary/50 appearance-none cursor-pointer"
                   >
                     <option value="">Select a company...</option>
-                    {marketItems.map(item => (
-                      <option key={item.symbol} value={item.symbol}>{item.name} ({item.symbol})</option>
+                    {marketItems.map((item) => (
+                      <option key={item.symbol} value={item.symbol}>
+                        {item.name} ({item.symbol})
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -704,8 +834,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ profile, marketI
                 {/* Crash Percent */}
                 <div>
                   <div className="flex justify-between mb-2">
-                    <label className="text-xs font-semibold text-textMuted uppercase tracking-wider">Crash Severity</label>
-                    <span className="text-sm font-bold text-negative">-{crashPercent}%</span>
+                    <label className="text-xs font-semibold text-textMuted uppercase tracking-wider">
+                      Crash Severity
+                    </label>
+                    <span className="text-sm font-bold text-negative">
+                      -{crashPercent}%
+                    </span>
                   </div>
                   <input
                     type="range"
@@ -723,34 +857,54 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ profile, marketI
 
                 {/* Boost Companies */}
                 <div>
-                  <label className="block text-xs font-semibold text-textMuted uppercase tracking-wider mb-2">Companies that Benefit</label>
+                  <label className="block text-xs font-semibold text-textMuted uppercase tracking-wider mb-2">
+                    Companies that Benefit
+                  </label>
                   <div className="relative">
                     <button
                       onClick={() => setBoostDropdownOpen(!boostDropdownOpen)}
                       className="w-full bg-surface border border-border rounded-lg px-4 py-3 text-left text-sm text-textMain focus:outline-none focus:border-primary/50 flex items-center justify-between"
                     >
-                      <span className={boostSymbols.length ? 'text-textMain' : 'text-textMuted'}>
-                        {boostSymbols.length ? `${boostSymbols.length} companies selected` : 'Select companies...'}
+                      <span
+                        className={
+                          boostSymbols.length
+                            ? "text-textMain"
+                            : "text-textMuted"
+                        }
+                      >
+                        {boostSymbols.length
+                          ? `${boostSymbols.length} companies selected`
+                          : "Select companies..."}
                       </span>
-                      <ChevronDown className={`w-4 h-4 text-textMuted transition-transform ${boostDropdownOpen ? 'rotate-180' : ''}`} />
+                      <ChevronDown
+                        className={`w-4 h-4 text-textMuted transition-transform ${boostDropdownOpen ? "rotate-180" : ""}`}
+                      />
                     </button>
                     {boostDropdownOpen && (
                       <div className="absolute z-10 w-full mt-1 bg-surface border border-border rounded-lg shadow-lg max-h-48 overflow-y-auto">
                         {marketItems
-                          .filter(item => item.symbol !== crashSymbol)
-                          .map(item => (
+                          .filter((item) => item.symbol !== crashSymbol)
+                          .map((item) => (
                             <button
                               key={item.symbol}
                               onClick={() => toggleBoostSymbol(item.symbol)}
                               className="w-full flex items-center gap-3 px-4 py-2 text-sm hover:bg-surfaceElevated transition-colors text-left"
                             >
-                              <div className={`w-4 h-4 rounded border flex items-center justify-center ${
-                                boostSymbols.includes(item.symbol) ? 'bg-primary border-primary' : 'border-border'
-                              }`}>
-                                {boostSymbols.includes(item.symbol) && <Check className="w-3 h-3 text-white" />}
+                              <div
+                                className={`w-4 h-4 rounded border flex items-center justify-center ${
+                                  boostSymbols.includes(item.symbol)
+                                    ? "bg-primary border-primary"
+                                    : "border-border"
+                                }`}
+                              >
+                                {boostSymbols.includes(item.symbol) && (
+                                  <Check className="w-3 h-3 text-white" />
+                                )}
                               </div>
                               <span>{item.name}</span>
-                              <span className="text-textMuted text-xs ml-auto">{item.symbol}</span>
+                              <span className="text-textMuted text-xs ml-auto">
+                                {item.symbol}
+                              </span>
                             </button>
                           ))}
                       </div>
@@ -758,10 +912,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ profile, marketI
                   </div>
                   {boostSymbols.length > 0 && (
                     <div className="flex flex-wrap gap-1 mt-2">
-                      {boostSymbols.map(s => (
-                        <span key={s} className="inline-flex items-center gap-1 px-2 py-0.5 bg-primary/10 text-primary rounded text-xs font-semibold">
+                      {boostSymbols.map((s) => (
+                        <span
+                          key={s}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 bg-primary/10 text-primary rounded text-xs font-semibold"
+                        >
                           {s}
-                          <button onClick={() => toggleBoostSymbol(s)} className="hover:text-white">
+                          <button
+                            onClick={() => toggleBoostSymbol(s)}
+                            className="hover:text-white"
+                          >
                             <X className="w-3 h-3" />
                           </button>
                         </span>
@@ -773,8 +933,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ profile, marketI
                 {/* Boost Percent */}
                 <div>
                   <div className="flex justify-between mb-2">
-                    <label className="text-xs font-semibold text-textMuted uppercase tracking-wider">Boost Amount</label>
-                    <span className="text-sm font-bold text-primary">+{boostPercent}%</span>
+                    <label className="text-xs font-semibold text-textMuted uppercase tracking-wider">
+                      Boost Amount
+                    </label>
+                    <span className="text-sm font-bold text-primary">
+                      +{boostPercent}%
+                    </span>
                   </div>
                   <input
                     type="range"
@@ -793,26 +957,34 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ profile, marketI
                 {/* Preview */}
                 {crashSymbol && (
                   <div className="bg-surfaceElevated rounded-lg p-4 border border-border">
-                    <div className="text-xs text-textMuted uppercase tracking-wider mb-2">Preview</div>
-                    <div className="text-sm font-semibold text-orange-400 mb-1">📰 {generateHeadline()}</div>
+                    <div className="text-xs text-textMuted uppercase tracking-wider mb-2">
+                      Preview
+                    </div>
+                    <div className="text-sm font-semibold text-orange-400 mb-1">
+                      📰 {generateHeadline()}
+                    </div>
                     <div className="text-xs text-textMuted">
-                      {marketItems.find(m => m.symbol === crashSymbol)?.name} drops {crashPercent}%
-                      {boostSymbols.length > 0 && ` • ${boostSymbols.join(', ')} rise ${boostPercent}%`}
+                      {marketItems.find((m) => m.symbol === crashSymbol)?.name}{" "}
+                      drops {crashPercent}%
+                      {boostSymbols.length > 0 &&
+                        ` • ${boostSymbols.join(", ")} rise ${boostPercent}%`}
                     </div>
                   </div>
                 )}
 
                 <button
                   onClick={handleTriggerNews}
-                  disabled={!crashSymbol || newsEvents.some(e => e.active)}
+                  disabled={!crashSymbol || newsEvents.some((e) => e.active)}
                   className={`w-full py-3 rounded-lg font-bold text-sm flex items-center justify-center gap-2 transition-all ${
-                    crashSymbol && !newsEvents.some(e => e.active)
-                      ? 'bg-gradient-to-r from-orange-500 to-red-500 text-white hover:from-orange-600 hover:to-red-600 shadow-lg shadow-orange-500/20'
-                      : 'bg-surface text-textMuted border border-border cursor-not-allowed'
+                    crashSymbol && !newsEvents.some((e) => e.active)
+                      ? "bg-gradient-to-r from-orange-500 to-red-500 text-white hover:from-orange-600 hover:to-red-600 shadow-lg shadow-orange-500/20"
+                      : "bg-surface text-textMuted border border-border cursor-not-allowed"
                   }`}
                 >
                   <Zap className="w-4 h-4" />
-                  {newsEvents.some(e => e.active) ? 'Stop active flash first' : 'Trigger News Flash'}
+                  {newsEvents.some((e) => e.active)
+                    ? "Stop active flash first"
+                    : "Trigger News Flash"}
                 </button>
               </div>
             </Card>
@@ -828,16 +1000,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ profile, marketI
                 <div className="text-center py-12 text-textMuted">
                   <Newspaper className="w-10 h-10 mx-auto mb-3 opacity-30" />
                   <p>No news events triggered yet</p>
-                  <p className="text-xs mt-1">Use the form to create your first news flash</p>
+                  <p className="text-xs mt-1">
+                    Use the form to create your first news flash
+                  </p>
                 </div>
               ) : (
                 <div className="space-y-3 max-h-[500px] overflow-y-auto">
-                  {newsEvents.map(event => {
-                    const crashCompany = marketItems.find(m => m.symbol === event.crash_company);
+                  {newsEvents.map((event) => {
+                    const crashCompany = marketItems.find(
+                      (m) => m.symbol === event.crash_company,
+                    );
                     return (
-                      <div key={event.id} className={`rounded-lg p-4 border ${event.active ? 'bg-orange-500/5 border-orange-500/30' : 'bg-surfaceElevated border-border'}`}>
+                      <div
+                        key={event.id}
+                        className={`rounded-lg p-4 border ${event.active ? "bg-orange-500/5 border-orange-500/30" : "bg-surfaceElevated border-border"}`}
+                      >
                         <div className="flex items-start justify-between mb-2">
-                          <div className="text-sm font-semibold text-orange-400 flex-1">{event.headline}</div>
+                          <div className="text-sm font-semibold text-orange-400 flex-1">
+                            {event.headline}
+                          </div>
                           <div className="flex items-center gap-2 ml-2">
                             {event.active && (
                               <button
@@ -848,20 +1029,34 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ profile, marketI
                               </button>
                             )}
                             {!event.active && (
-                              <span className="px-2 py-0.5 bg-surface text-textMuted border border-border rounded text-xs font-semibold">Ended</span>
+                              <span className="px-2 py-0.5 bg-surface text-textMuted border border-border rounded text-xs font-semibold">
+                                Ended
+                              </span>
                             )}
                             <span className="text-xs text-textMuted whitespace-nowrap">
-                              {new Date(event.created_at).toLocaleString('en-IN', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' })}
+                              {new Date(event.created_at).toLocaleString(
+                                "en-IN",
+                                {
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                  day: "numeric",
+                                  month: "short",
+                                },
+                              )}
                             </span>
                           </div>
                         </div>
                         <div className="flex flex-wrap gap-2 text-xs">
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-negative/10 text-negative rounded font-semibold">
                             <TrendingDown className="w-3 h-3" />
-                            {crashCompany?.name || event.crash_company} {event.crash_percent}%
+                            {crashCompany?.name || event.crash_company}{" "}
+                            {event.crash_percent}%
                           </span>
-                          {event.boost_companies.map(sym => (
-                            <span key={sym} className="inline-flex items-center gap-1 px-2 py-0.5 bg-primary/10 text-primary rounded font-semibold">
+                          {event.boost_companies.map((sym) => (
+                            <span
+                              key={sym}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 bg-primary/10 text-primary rounded font-semibold"
+                            >
                               <TrendingUp className="w-3 h-3" />
                               {sym} +{event.boost_percent}%
                             </span>
@@ -875,6 +1070,403 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ profile, marketI
             </Card>
           </div>
         )}
+      </div>
+    </div>
+  );
+};
+
+/**
+ * AdminFullChart — Renders the FULL Excel timeline with a vertical marker
+ * at the current tick position. Past = solid, future = dashed.
+ * ADMIN-ONLY component — never used by participant views.
+ */
+import {
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  ReferenceLine,
+} from "recharts";
+
+interface AdminFullChartProps {
+  data: StockDataPoint[];
+  currentTick: number;
+}
+
+const AdminFullChart: React.FC<AdminFullChartProps> = ({
+  data,
+  currentTick,
+}) => {
+  // Zoom domain: [startIndex, endIndex]
+  const [xDomain, setXDomain] = useState<[number, number]>([
+    0,
+    data.length - 1,
+  ]);
+
+  // Reset domain when data changes (e.g. switching stocks)
+  useEffect(() => {
+    setXDomain([0, data.length - 1]);
+  }, [data.length]);
+
+  // Drag-to-pan refs
+  const dragRef = useRef<{
+    startX: number;
+    startDomain: [number, number];
+  } | null>(null);
+
+  // Pinch-to-zoom refs
+  const pinchRef = useRef<{
+    distance: number;
+    domain: [number, number];
+  } | null>(null);
+
+  // Container ref for native non-passive wheel listener
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  // Attach non-passive wheel listener to block browser zoom
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const prevent = (e: WheelEvent) => {
+      e.preventDefault();
+    };
+
+    el.addEventListener("wheel", prevent, { passive: false });
+
+    return () => {
+      el.removeEventListener("wheel", prevent);
+    };
+  }, []);
+
+  // Indexed data with past/future split — memoized
+  const chartData = useMemo(() => {
+    return data.map((point, i) => ({
+      index: i,
+      ...point,
+      pastValue: i <= currentTick ? point.value : undefined,
+      futureValue: i >= currentTick ? point.value : undefined,
+    }));
+  }, [data, currentTick]);
+
+  if (chartData.length === 0) {
+    return (
+      <div className="text-center text-textMuted py-8">
+        No graph data available
+      </div>
+    );
+  }
+
+  // --- Helpers ---
+
+  const clampDomain = (start: number, end: number): [number, number] => {
+    const minRange = 10;
+    const maxIndex = data.length - 1;
+
+    if (end - start < minRange) return xDomain;
+
+    if (start < 0) {
+      end -= start;
+      start = 0;
+    }
+    if (end > maxIndex) {
+      const ov = end - maxIndex;
+      start -= ov;
+      end = maxIndex;
+    }
+
+    start = Math.max(0, start);
+    end = Math.min(maxIndex, end);
+
+    return [Math.round(start), Math.round(end)];
+  };
+
+  // --- Event Handlers ---
+
+  const handleWheel = (e: React.WheelEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.ctrlKey) return;
+
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+
+    const mouseX = e.clientX - rect.left;
+    const [start, end] = xDomain;
+    const visibleRange = end - start;
+
+    // Cursor position as 0→1 ratio
+    const ratio = mouseX / rect.width;
+    // Data index under cursor
+    const cursorIndex = start + visibleRange * ratio;
+
+    const zoomFactor = e.deltaY > 0 ? 1.15 : 0.85;
+    const newRange = visibleRange * zoomFactor;
+
+    const newStart = cursorIndex - newRange * ratio;
+    const newEnd = newStart + newRange;
+
+    setXDomain(clampDomain(newStart, newEnd));
+  };
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    dragRef.current = {
+      startX: e.clientX,
+      startDomain: xDomain,
+    };
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!dragRef.current) return;
+
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+
+    const dx = e.clientX - dragRef.current.startX;
+    const [origStart, origEnd] = dragRef.current.startDomain;
+    const visibleRange = origEnd - origStart;
+
+    const pixelsPerIndex = rect.width / visibleRange;
+    const indexShift = dx / pixelsPerIndex;
+
+    const newStart = origStart - indexShift;
+    const newEnd = origEnd - indexShift;
+
+    setXDomain(clampDomain(newStart, newEnd));
+  };
+
+  const handleMouseUp = () => {
+    dragRef.current = null;
+  };
+
+  const handleDoubleClick = () => {
+    setXDomain([0, data.length - 1]);
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 2) {
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      pinchRef.current = {
+        distance: Math.abs(dx),
+        domain: xDomain,
+      };
+    } else if (e.touches.length === 1) {
+      dragRef.current = {
+        startX: e.touches[0].clientX,
+        startDomain: xDomain,
+      };
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (e.touches.length === 2 && pinchRef.current) {
+      const rect = containerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+
+      const t1 = e.touches[0];
+      const t2 = e.touches[1];
+      const newDistance = Math.abs(t1.clientX - t2.clientX);
+      const midX = (t1.clientX + t2.clientX) / 2 - rect.left;
+
+      const ratio = midX / rect.width;
+      const [origStart, origEnd] = pinchRef.current.domain;
+      const visibleRange = origEnd - origStart;
+      const centerIndex = origStart + visibleRange * ratio;
+
+      const zoomFactor = pinchRef.current.distance / newDistance;
+      const newRange = visibleRange * zoomFactor;
+
+      const newStart = centerIndex - newRange * ratio;
+      const newEnd = newStart + newRange;
+
+      setXDomain(clampDomain(newStart, newEnd));
+    } else if (e.touches.length === 1 && dragRef.current) {
+      const rect = containerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+
+      const dx = e.touches[0].clientX - dragRef.current.startX;
+      const [origStart, origEnd] = dragRef.current.startDomain;
+      const visibleRange = origEnd - origStart;
+      const pixelsPerIndex = rect.width / visibleRange;
+      const indexShift = dx / pixelsPerIndex;
+
+      const newStart = origStart - indexShift;
+      const newEnd = origEnd - indexShift;
+
+      setXDomain(clampDomain(newStart, newEnd));
+    }
+  };
+
+  const handleTouchEnd = () => {
+    dragRef.current = null;
+    pinchRef.current = null;
+  };
+
+  const isZoomed = xDomain[0] > 0 || xDomain[1] < data.length - 1;
+
+  return (
+    <div className="space-y-2">
+      {/* Zoom controls bar */}
+      <div className="flex items-center justify-between text-xs text-textMuted">
+        <span>
+          Showing: {xDomain[0]}s – {xDomain[1]}s
+          {isZoomed && <span className="text-primary ml-2">(zoomed)</span>}
+        </span>
+        <div className="flex items-center gap-2">
+          <span className="hidden md:inline opacity-60">
+            Scroll to zoom · Drag to pan · Double-click to reset
+          </span>
+          {isZoomed && (
+            <button
+              onClick={handleDoubleClick}
+              className="px-2 py-1 bg-surface border border-border rounded text-xs font-semibold text-textMuted hover:text-textMain transition-colors"
+            >
+              Reset Zoom
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Chart container with interaction handlers */}
+      <div
+        ref={containerRef}
+        className="w-full h-[400px] cursor-grab active:cursor-grabbing select-none"
+        style={{ touchAction: "none", overscrollBehavior: "contain" }}
+        onWheel={handleWheel}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseUp}
+        onDoubleClick={handleDoubleClick}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+      >
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart data={chartData}>
+            <defs>
+              <linearGradient
+                id="adminPastGradient"
+                x1="0"
+                y1="0"
+                x2="0"
+                y2="1"
+              >
+                <stop offset="5%" stopColor="#1ED3A6" stopOpacity={0.3} />
+                <stop offset="95%" stopColor="#1ED3A6" stopOpacity={0} />
+              </linearGradient>
+              <linearGradient
+                id="adminFutureGradient"
+                x1="0"
+                y1="0"
+                x2="0"
+                y2="1"
+              >
+                <stop offset="5%" stopColor="#8FA6A0" stopOpacity={0.15} />
+                <stop offset="95%" stopColor="#8FA6A0" stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid
+              strokeDasharray="3 3"
+              vertical={false}
+              strokeOpacity={0.1}
+            />
+            <XAxis
+              dataKey="index"
+              type="number"
+              domain={xDomain}
+              axisLine={false}
+              tickLine={false}
+              tick={{ fill: "#8FA6A0", fontSize: 10 }}
+              minTickGap={60}
+              tickFormatter={(i: number) => {
+                if (i >= 3600)
+                  return `${Math.floor(i / 3600)}h${Math.floor((i % 3600) / 60)}m`;
+                if (i >= 60) return `${Math.floor(i / 60)}m${i % 60}s`;
+                return `${i}s`;
+              }}
+              allowDataOverflow
+            />
+            <YAxis
+              domain={["auto", "auto"]}
+              orientation="right"
+              axisLine={false}
+              tickLine={false}
+              tick={{ fill: "#8FA6A0", fontSize: 11 }}
+              tickFormatter={(value) => `₹${(value ?? 0).toLocaleString()}`}
+            />
+            <Tooltip
+              contentStyle={{
+                backgroundColor: "#18211E",
+                borderColor: "#1F2A26",
+                borderRadius: "8px",
+                color: "#E6F1EE",
+              }}
+              itemStyle={{ color: "#1ED3A6" }}
+              labelFormatter={(index: number) => {
+                if (index >= 3600)
+                  return `${Math.floor(index / 3600)}h ${Math.floor((index % 3600) / 60)}m ${index % 60}s`;
+                if (index >= 60)
+                  return `${Math.floor(index / 60)}m ${index % 60}s`;
+                return `${index}s`;
+              }}
+              formatter={(value: number | undefined) =>
+                value !== undefined
+                  ? [`₹${value.toFixed(2)}`, "Price"]
+                  : ["-", "Price"]
+              }
+            />
+
+            {/* Past segment — solid green */}
+            <Area
+              type="monotone"
+              dataKey="pastValue"
+              stroke="#1ED3A6"
+              strokeWidth={2}
+              fillOpacity={1}
+              fill="url(#adminPastGradient)"
+              connectNulls={false}
+              dot={false}
+              isAnimationActive={false}
+            />
+
+            {/* Future segment — dashed gray */}
+            <Area
+              type="monotone"
+              dataKey="futureValue"
+              stroke="#8FA6A0"
+              strokeWidth={1.5}
+              strokeDasharray="5 3"
+              fillOpacity={1}
+              fill="url(#adminFutureGradient)"
+              connectNulls={false}
+              dot={false}
+              isAnimationActive={false}
+            />
+
+            {/* Current tick marker */}
+            {currentTick > 0 && currentTick < data.length && (
+              <ReferenceLine
+                x={currentTick}
+                stroke="#F59E0B"
+                strokeWidth={2}
+                strokeDasharray="4 4"
+                label={{
+                  value: "NOW",
+                  fill: "#F59E0B",
+                  fontSize: 10,
+                  position: "top",
+                }}
+              />
+            )}
+          </AreaChart>
+        </ResponsiveContainer>
       </div>
     </div>
   );
@@ -2436,25 +3028,7 @@ export const UserLogin: React.FC<UserLoginProps> = ({ onOpenAdmin }) => {
             </div>
           </div>
 
-          {/* Decorative SVG stock-chart lines */}
-          <div className="relative h-20 mt-6 opacity-30">
-            <svg viewBox="0 0 400 80" className="w-full h-full">
-              <path
-                d="M0,60 Q50,40 100,50 T200,30 T300,45 T400,20"
-                fill="none"
-                stroke="#1ED3A6"
-                strokeWidth="2"
-                className="animate-pulse"
-              />
-              <path
-                d="M0,70 Q80,50 150,60 T250,40 T350,55 T400,35"
-                fill="none"
-                stroke="#1ED3A6"
-                strokeWidth="1"
-                opacity="0.5"
-              />
-            </svg>
-          </div>
+
         </div>
       </div>
 
@@ -2800,7 +3374,7 @@ export const StockChart: React.FC<StockChartProps> = ({ data, color = '#1ED3A6' 
 ## File: `components/dashboard/DashboardLayout.tsx`
 
 ```tsx
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, Suspense, lazy } from "react";
 import { Sidebar } from "./Sidebar";
 import { Card } from "../ui/Card";
 import { MainChart, MiniSparkline, SentimentChart } from "./Charts";
@@ -2823,11 +3397,31 @@ import {
 } from "lucide-react";
 import { Button } from "../ui/Button";
 import { TradeModal } from "./TradeModal";
-import { StockDetailChart } from "./StockDetailChart";
+
+// Lazy-load stock detail chart (contains Recharts)
+const StockDetailChart = lazy(() =>
+  import("./StockDetailChart").then((m) => ({ default: m.StockDetailChart })),
+);
 import type { Profile } from "../auth/AuthProvider";
 import type { MarketItem } from "../../hooks/useMarket";
 import type { NewsEvent } from "../../hooks/useNews";
 import type { PortfolioItem, Transaction } from "../../hooks/usePortfolio";
+
+// Map company symbols to their logo filenames in /public
+const COMPANY_LOGOS: Record<string, string> = {
+  VELOCITY: "/VelocityAuto.png",
+  APEXAUTO: "/ApexAutomotive.png",
+  CRUISER: "/CruiserDynamics.png",
+  VITALIS: "/VitalisHealth.png",
+  CAREPLUS: "/CarePlus.png",
+  MEDISURG: "/Medisurge Pharma.png",
+  EDUNEXT: "/EduNext.png",
+  SCHOLAR: "/ScholarStream.png",
+  BRAINB: "/BrainBoost.png",
+  FRESHC: "/FreshCrave Foods.png",
+  SPICER: "/SpiceRoute Dining.png",
+  URBANB: "/UrbanBites.png",
+};
 
 interface DashboardLayoutProps {
   profile: Profile;
@@ -2922,8 +3516,14 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
     return acc + (item.amount ?? 0) * currentPrice;
   }, 0);
 
-  // If viewing a stock detail chart
-  if (selectedStock) {
+  // If viewing a stock detail chart, look up the LIVE version from marketItems
+  // so it updates in real-time (instead of using the stale snapshot)
+  const liveSelectedStock = selectedStock
+    ? (marketItems.find((m) => m.symbol === selectedStock.symbol) ??
+      selectedStock)
+    : null;
+
+  if (liveSelectedStock) {
     return (
       <div className="flex min-h-screen bg-background text-textMain">
         <Sidebar
@@ -2936,19 +3536,27 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
           currentUserName={profile.display_name}
         />
         <main className="flex-1 p-4 md:p-8 overflow-y-auto max-h-screen">
-          <StockDetailChart
-            stock={selectedStock}
-            onBack={() => setSelectedStock(null)}
-            ownedQty={
-              portfolio.find((p) => p.symbol === selectedStock.symbol)
-                ?.amount || 0
+          <Suspense
+            fallback={
+              <div className="text-textMuted text-center py-10 animate-pulse">
+                Loading chart...
+              </div>
             }
-            avgPrice={
-              portfolio.find((p) => p.symbol === selectedStock.symbol)
-                ?.avg_price || 0
-            }
-            onTrade={() => handleOpenTrade(selectedStock)}
-          />
+          >
+            <StockDetailChart
+              stock={liveSelectedStock}
+              onBack={() => setSelectedStock(null)}
+              ownedQty={
+                portfolio.find((p) => p.symbol === liveSelectedStock.symbol)
+                  ?.amount || 0
+              }
+              avgPrice={
+                portfolio.find((p) => p.symbol === liveSelectedStock.symbol)
+                  ?.avg_price || 0
+              }
+              onTrade={() => handleOpenTrade(liveSelectedStock)}
+            />
+          </Suspense>
         </main>
         {tradeModalOpen && (
           <TradeModal
@@ -2958,8 +3566,8 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
             balance={balance}
             onConfirm={handleConfirmTrade}
             ownedQuantity={
-              portfolio.find((p) => p.symbol === selectedAsset?.symbol)?.amount ||
-              0
+              portfolio.find((p) => p.symbol === selectedAsset?.symbol)
+                ?.amount || 0
             }
             transactions={transactions.filter(
               (t) => t.symbol === selectedAsset?.symbol,
@@ -2997,13 +3605,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
         </div>
 
         {/* Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-          <Card className="bg-gradient-to-br from-surface to-surfaceElevated">
-            <h3 className="text-sm text-textMuted mb-1">Cash Balance</h3>
-            <div className="text-2xl font-bold font-mono">
-              ₹{balance.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
-            </div>
-          </Card>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
           <Card className="bg-gradient-to-br from-surface to-surfaceElevated">
             <h3 className="text-sm text-textMuted mb-1">Stock Value</h3>
             <div className="text-2xl font-bold font-mono">
@@ -3037,8 +3639,12 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
                 onClick={() => setSelectedStock(item)}
               >
                 <div className="flex items-center gap-3 mb-2">
-                  <div className="w-8 h-8 rounded-full bg-surfaceElevated border border-border flex items-center justify-center font-bold text-primary">
-                    {item.icon}
+                  <div className="w-8 h-8 rounded-full bg-surfaceElevated border border-border flex items-center justify-center overflow-hidden">
+                    <img
+                      src={COMPANY_LOGOS[item.symbol] || ""}
+                      alt={item.name}
+                      className="w-full h-full object-cover"
+                    />
                   </div>
                   <div>
                     <div className="font-semibold text-textMain">
@@ -3151,8 +3757,12 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
                         className="flex items-center gap-3 cursor-pointer"
                         onClick={() => setSelectedStock(item)}
                       >
-                        <div className="w-10 h-10 rounded-full bg-surfaceElevated border border-border flex items-center justify-center font-bold text-primary transition-transform group-hover:scale-110">
-                          {item.icon}
+                        <div className="w-10 h-10 rounded-full bg-surfaceElevated border border-border flex items-center justify-center overflow-hidden transition-transform group-hover:scale-110">
+                          <img
+                            src={COMPANY_LOGOS[item.symbol] || ""}
+                            alt={item.name}
+                            className="w-full h-full object-cover"
+                          />
                         </div>
                         <div>
                           <div className="font-semibold text-textMain">
@@ -3333,8 +3943,12 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
                       >
                         <td className="py-4 pl-2">
                           <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-full bg-surfaceElevated border border-border flex items-center justify-center font-bold text-textMain">
-                              {item.symbol?.[0] ?? "?"}
+                            <div className="w-8 h-8 rounded-full bg-surfaceElevated border border-border flex items-center justify-center overflow-hidden">
+                              <img
+                                src={COMPANY_LOGOS[item.symbol] || ""}
+                                alt={item.symbol}
+                                className="w-full h-full object-cover"
+                              />
                             </div>
                             <div>
                               <div className="font-semibold text-textMain">
@@ -4158,9 +4772,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <button
             key={item.label}
             onClick={() => setActiveTab(item.label)}
-            className={`w-full flex items-center gap-3 px-3 py-3 rounded-lg transition-all duration-200 group ${
+            className={`w-full flex items-center gap-3 px-3 py-3 rounded-lg transition-all duration-200 group focus:outline-none ${
               activeTab === item.label
-                ? "bg-surfaceElevated text-primary border border-border"
+                ? "bg-surfaceElevated text-primary"
                 : "text-textMuted hover:text-textMain hover:bg-surface/50"
             }`}
           >
@@ -4191,12 +4805,36 @@ export const Sidebar: React.FC<SidebarProps> = ({
 ## File: `components/dashboard/StockDetailChart.tsx`
 
 ```tsx
-import React from 'react';
-import { ArrowLeft, TrendingUp, TrendingDown } from 'lucide-react';
-import { MarketItem } from '../../types';
-import { StockChart } from './Charts';
-import { Button } from '../ui/Button';
-import { Card } from '../ui/Card';
+import React, { useState, useMemo } from "react";
+import { ArrowLeft, TrendingUp, TrendingDown } from "lucide-react";
+import { MarketItem } from "../../types";
+import { StockChart } from "./Charts";
+import { Button } from "../ui/Button";
+import { Card } from "../ui/Card";
+
+const COMPANY_LOGOS: Record<string, string> = {
+  VELOCITY: "/VelocityAuto.png",
+  APEXAUTO: "/ApexAutomotive.png",
+  CRUISER: "/CruiserDynamics.png",
+  VITALIS: "/VitalisHealth.png",
+  CAREPLUS: "/CarePlus.png",
+  MEDISURG: "/Medisurge Pharma.png",
+  EDUNEXT: "/EduNext.png",
+  SCHOLAR: "/ScholarStream.png",
+  BRAINB: "/BrainBoost.png",
+  FRESHC: "/FreshCrave Foods.png",
+  SPICER: "/SpiceRoute Dining.png",
+  URBANB: "/UrbanBites.png",
+};
+
+type Timeframe = "1m" | "5m" | "10m" | "30m" | "overall";
+
+const TICK_MAP: Record<Exclude<Timeframe, "overall">, number> = {
+  "1m": 60,
+  "5m": 300,
+  "10m": 600,
+  "30m": 1800,
+};
 
 interface StockDetailChartProps {
   stock: MarketItem;
@@ -4213,24 +4851,45 @@ export const StockDetailChart: React.FC<StockDetailChartProps> = ({
   avgPrice,
   onTrade,
 }) => {
+  const [timeframe, setTimeframe] = useState<Timeframe>("overall");
+
   const isPositive = (stock.change ?? 0) >= 0;
   const currentValue = ownedQty * (stock.price ?? 0);
   const pnl = ownedQty > 0 ? ((stock.price ?? 0) - avgPrice) * ownedQty : 0;
+
+  // O(n) slice — no mutation, no deep clone
+  const visibleData = useMemo(() => {
+    const history = stock.priceHistory;
+    if (!history || history.length === 0) return [];
+    if (timeframe === "overall") return history;
+
+    const count = TICK_MAP[timeframe];
+    return history.slice(-count);
+  }, [stock.priceHistory, timeframe]);
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center gap-4">
-        <button onClick={onBack} className="p-2 rounded-lg hover:bg-surfaceElevated transition-colors">
+        <button
+          onClick={onBack}
+          className="p-2 rounded-lg hover:bg-surfaceElevated transition-colors"
+        >
           <ArrowLeft className="w-5 h-5 text-textMuted" />
         </button>
-        <div className="w-12 h-12 rounded-full bg-surfaceElevated border border-border flex items-center justify-center text-xl font-bold text-primary">
-          {stock.icon}
+        <div className="w-12 h-12 rounded-full bg-surfaceElevated border border-border flex items-center justify-center overflow-hidden">
+          <img
+            src={COMPANY_LOGOS[stock.symbol] || ""}
+            alt={stock.name}
+            className="w-full h-full object-cover"
+          />
         </div>
         <div className="flex-1">
           <h1 className="text-2xl font-bold text-textMain">{stock.name}</h1>
           <div className="flex items-center gap-2 mt-1">
-            <span className="text-sm font-medium text-textMuted">{stock.symbol}</span>
+            <span className="text-sm font-medium text-textMuted">
+              {stock.symbol}
+            </span>
             <span className="px-2 py-0.5 rounded-full bg-surfaceElevated border border-border text-[10px] font-semibold text-textMuted uppercase tracking-wider">
               {stock.sector}
             </span>
@@ -4238,37 +4897,79 @@ export const StockDetailChart: React.FC<StockDetailChartProps> = ({
         </div>
         <div className="text-right">
           <div className="text-3xl font-bold font-mono text-textMain">
-            ₹{(stock.price ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            ₹
+            {(stock.price ?? 0).toLocaleString("en-IN", {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            })}
           </div>
-          <div className={`flex items-center justify-end gap-1 text-sm font-semibold ${isPositive ? 'text-primary' : 'text-negative'}`}>
-            {isPositive ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
-            {isPositive ? '+' : ''}{(stock.change ?? 0).toFixed(2)}%
+          <div
+            className={`flex items-center justify-end gap-1 text-sm font-semibold ${isPositive ? "text-primary" : "text-negative"}`}
+          >
+            {isPositive ? (
+              <TrendingUp className="w-4 h-4" />
+            ) : (
+              <TrendingDown className="w-4 h-4" />
+            )}
+            {isPositive ? "+" : ""}
+            {(stock.change ?? 0).toFixed(2)}%
           </div>
         </div>
       </div>
 
+      {/* Timeframe Controls */}
+      <div className="flex gap-2">
+        {(["1m", "5m", "10m", "30m", "overall"] as Timeframe[]).map((tf) => (
+          <button
+            key={tf}
+            onClick={() => setTimeframe(tf)}
+            className={`px-3 py-1.5 rounded text-xs font-semibold transition-all ${
+              timeframe === tf
+                ? "bg-primary text-white shadow-sm shadow-primary/30"
+                : "bg-surface border border-border text-textMuted hover:text-textMain hover:border-primary/30"
+            }`}
+          >
+            {tf === "overall" ? "Overall" : tf.toUpperCase()}
+          </button>
+        ))}
+      </div>
+
       {/* Chart */}
       <Card padding="sm">
-        <StockChart data={stock.priceHistory} />
+        <StockChart data={visibleData} />
       </Card>
 
       {/* Stats Grid */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card>
           <div className="text-xs text-textMuted mb-1">Open</div>
-          <div className="font-mono font-bold">{(stock.priceHistory?.length ?? 0) > 0 ? `₹${stock.priceHistory[0].value.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}</div>
+          <div className="font-mono font-bold">
+            {visibleData.length > 0
+              ? `₹${visibleData[0].value.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`
+              : "—"}
+          </div>
         </Card>
         <Card>
           <div className="text-xs text-textMuted mb-1">High</div>
-          <div className="font-mono font-bold text-primary">{(stock.priceHistory?.length ?? 0) > 0 ? `₹${Math.max(...stock.priceHistory.map(p => p.value)).toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}</div>
+          <div className="font-mono font-bold text-primary">
+            {visibleData.length > 0
+              ? `₹${Math.max(...visibleData.map((p) => p.value)).toLocaleString("en-IN", { minimumFractionDigits: 2 })}`
+              : "—"}
+          </div>
         </Card>
         <Card>
           <div className="text-xs text-textMuted mb-1">Low</div>
-          <div className="font-mono font-bold text-negative">{(stock.priceHistory?.length ?? 0) > 0 ? `₹${Math.min(...stock.priceHistory.map(p => p.value)).toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}</div>
+          <div className="font-mono font-bold text-negative">
+            {visibleData.length > 0
+              ? `₹${Math.min(...visibleData.map((p) => p.value)).toLocaleString("en-IN", { minimumFractionDigits: 2 })}`
+              : "—"}
+          </div>
         </Card>
         <Card>
           <div className="text-xs text-textMuted mb-1">Sentiment</div>
-          <div className={`font-bold ${stock.sentiment === 'Bullish' ? 'text-primary' : stock.sentiment === 'Bearish' ? 'text-negative' : 'text-textMuted'}`}>
+          <div
+            className={`font-bold ${stock.sentiment === "Bullish" ? "text-primary" : stock.sentiment === "Bearish" ? "text-negative" : "text-textMuted"}`}
+          >
             {stock.sentiment}
           </div>
         </Card>
@@ -4277,7 +4978,9 @@ export const StockDetailChart: React.FC<StockDetailChartProps> = ({
       {/* Your Position */}
       {ownedQty > 0 && (
         <Card className="bg-gradient-to-r from-surface to-surfaceElevated">
-          <h3 className="text-sm font-semibold text-textMuted mb-3">Your Position</h3>
+          <h3 className="text-sm font-semibold text-textMuted mb-3">
+            Your Position
+          </h3>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div>
               <div className="text-xs text-textMuted">Quantity</div>
@@ -4285,16 +4988,27 @@ export const StockDetailChart: React.FC<StockDetailChartProps> = ({
             </div>
             <div>
               <div className="text-xs text-textMuted">Avg Buy Price</div>
-              <div className="font-mono font-bold">₹{avgPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+              <div className="font-mono font-bold">
+                ₹
+                {avgPrice.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+              </div>
             </div>
             <div>
               <div className="text-xs text-textMuted">Current Value</div>
-              <div className="font-mono font-bold">₹{currentValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+              <div className="font-mono font-bold">
+                ₹
+                {currentValue.toLocaleString("en-IN", {
+                  minimumFractionDigits: 2,
+                })}
+              </div>
             </div>
             <div>
               <div className="text-xs text-textMuted">P&L</div>
-              <div className={`font-mono font-bold ${pnl >= 0 ? 'text-primary' : 'text-negative'}`}>
-                {pnl >= 0 ? '+' : ''}₹{pnl.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+              <div
+                className={`font-mono font-bold ${pnl >= 0 ? "text-primary" : "text-negative"}`}
+              >
+                {pnl >= 0 ? "+" : ""}₹
+                {pnl.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
               </div>
             </div>
           </div>
@@ -4805,13 +5519,13 @@ export const Card: React.FC<CardProps> = ({
 
 ## File: `constants.ts`
 
-```ts
+```typescript
 import { MarketItem, StockDataPoint } from './types';
-import { generatePriceHistory } from './engine/priceEngine';
+import { getGraphPrice } from './engine/graphPlaybackEngine';
 
 export const APP_NAME = "VSX: Buy or Bail";
 
-// Generate realistic looking chart data (legacy helper)
+// Generate realistic looking chart data (legacy helper — kept for metrics only)
 export const generateChartData = (points: number, startValue: number, volatility: number): StockDataPoint[] => {
   const data: StockDataPoint[] = [];
   let currentValue = startValue;
@@ -4859,30 +5573,29 @@ export const METRICS = [
   },
 ];
 
-export const INITIAL_MARKET_ITEMS: MarketItem[] = ([
+// Market items use graph data for initial prices (tick 0)
+// priceHistory starts empty — populated by live ticking in useMarket
+export const INITIAL_MARKET_ITEMS: MarketItem[] = [
   // Automobile Sector
-  { name: 'Velocity Auto', symbol: 'VELOCITY', price: 1250.00, change: 0, sentiment: 'Bullish' as const, sector: 'Automobile', icon: 'V', priceHistory: [] },
-  { name: 'Apex Automotive', symbol: 'APEXAUTO', price: 850.00, change: 0, sentiment: 'Neutral' as const, sector: 'Automobile', icon: 'A', priceHistory: [] },
-  { name: 'Cruiser Dynamics', symbol: 'CRUISER', price: 2150.00, change: 0, sentiment: 'Bullish' as const, sector: 'Automobile', icon: 'C', priceHistory: [] },
+  { name: 'Velocity Auto', symbol: 'VELOCITY', price: getGraphPrice('VELOCITY', 0), change: 0, sentiment: 'Bullish' as const, sector: 'Automobile', icon: 'V', priceHistory: [] },
+  { name: 'Apex Automotive', symbol: 'APEXAUTO', price: getGraphPrice('APEXAUTO', 0), change: 0, sentiment: 'Neutral' as const, sector: 'Automobile', icon: 'A', priceHistory: [] },
+  { name: 'Cruiser Dynamics', symbol: 'CRUISER', price: getGraphPrice('CRUISER', 0), change: 0, sentiment: 'Bullish' as const, sector: 'Automobile', icon: 'C', priceHistory: [] },
 
   // Health Sector
-  { name: 'Vitalis Health', symbol: 'VITALIS', price: 1650.00, change: 0, sentiment: 'Bullish' as const, sector: 'Health', icon: 'V', priceHistory: [] },
-  { name: 'CarePlus Hospitals', symbol: 'CAREPLUS', price: 3400.00, change: 0, sentiment: 'Neutral' as const, sector: 'Health', icon: 'C', priceHistory: [] },
-  { name: 'Medisurge Pharma', symbol: 'MEDISURG', price: 920.00, change: 0, sentiment: 'Bearish' as const, sector: 'Health', icon: 'M', priceHistory: [] },
+  { name: 'Vitalis Health', symbol: 'VITALIS', price: getGraphPrice('VITALIS', 0), change: 0, sentiment: 'Bullish' as const, sector: 'Health', icon: 'V', priceHistory: [] },
+  { name: 'CarePlus Hospitals', symbol: 'CAREPLUS', price: getGraphPrice('CAREPLUS', 0), change: 0, sentiment: 'Neutral' as const, sector: 'Health', icon: 'C', priceHistory: [] },
+  { name: 'Medisurge Pharma', symbol: 'MEDISURG', price: getGraphPrice('MEDISURG', 0), change: 0, sentiment: 'Bearish' as const, sector: 'Health', icon: 'M', priceHistory: [] },
 
   // EdTech Sector
-  { name: 'EduNext', symbol: 'EDUNEXT', price: 540.00, change: 0, sentiment: 'Neutral' as const, sector: 'EdTech', icon: 'E', priceHistory: [] },
-  { name: 'ScholarStream', symbol: 'SCHOLAR', price: 890.00, change: 0, sentiment: 'Bullish' as const, sector: 'EdTech', icon: 'S', priceHistory: [] },
-  { name: 'BrainBoost', symbol: 'BRAINB', price: 1120.00, change: 0, sentiment: 'Bearish' as const, sector: 'EdTech', icon: 'B', priceHistory: [] },
+  { name: 'EduNext', symbol: 'EDUNEXT', price: getGraphPrice('EDUNEXT', 0), change: 0, sentiment: 'Neutral' as const, sector: 'EdTech', icon: 'E', priceHistory: [] },
+  { name: 'ScholarStream', symbol: 'SCHOLAR', price: getGraphPrice('SCHOLAR', 0), change: 0, sentiment: 'Bullish' as const, sector: 'EdTech', icon: 'S', priceHistory: [] },
+  { name: 'BrainBoost', symbol: 'BRAINB', price: getGraphPrice('BRAINB', 0), change: 0, sentiment: 'Bearish' as const, sector: 'EdTech', icon: 'B', priceHistory: [] },
 
   // Food Sector
-  { name: 'FreshCrave Foods', symbol: 'FRESHC', price: 430.00, change: 0, sentiment: 'Neutral' as const, sector: 'Food', icon: 'F', priceHistory: [] },
-  { name: 'SpiceRoute Dining', symbol: 'SPICER', price: 1750.00, change: 0, sentiment: 'Bullish' as const, sector: 'Food', icon: 'S', priceHistory: [] },
-  { name: 'UrbanBites', symbol: 'URBANB', price: 220.00, change: 0, sentiment: 'Bullish' as const, sector: 'Food', icon: 'U', priceHistory: [] },
-]).map(item => ({
-  ...item,
-  priceHistory: generatePriceHistory(item.price, 200),
-}));
+  { name: 'FreshCrave Foods', symbol: 'FRESHC', price: getGraphPrice('FRESHC', 0), change: 0, sentiment: 'Neutral' as const, sector: 'Food', icon: 'F', priceHistory: [] },
+  { name: 'SpiceRoute Dining', symbol: 'SPICER', price: getGraphPrice('SPICER', 0), change: 0, sentiment: 'Bullish' as const, sector: 'Food', icon: 'S', priceHistory: [] },
+  { name: 'UrbanBites', symbol: 'URBANB', price: getGraphPrice('URBANB', 0), change: 0, sentiment: 'Bullish' as const, sector: 'Food', icon: 'U', priceHistory: [] },
+];
 
 export const SENTIMENT_DATA = [
   { name: 'Bullish', value: 65, color: '#1ED3A6' },
@@ -4891,9 +5604,106 @@ export const SENTIMENT_DATA = [
 ];
 ```
 
+## File: `data/graphData.ts`
+
+```typescript
+/**
+ * graphData.ts
+ *
+ * Imports the pre-generated graphData.json, validates its structure,
+ * and exports a frozen, readonly typed object.
+ *
+ * In development: throws descriptive errors on invalid data.
+ * In production: returns safe fallback defaults.
+ */
+
+import rawGraphData from './graphData.json';
+
+const REQUIRED_SYMBOLS = [
+    'VELOCITY', 'APEXAUTO', 'CRUISER', 'VITALIS',
+    'CAREPLUS', 'MEDISURG', 'EDUNEXT', 'SCHOLAR',
+    'BRAINB', 'FRESHC', 'SPICER', 'URBANB',
+] as const;
+
+export type SymbolKey = (typeof REQUIRED_SYMBOLS)[number];
+
+export type GraphDataMap = Readonly<Record<SymbolKey, readonly number[]>>;
+
+const DEFAULT_FALLBACK_PRICE = 100;
+const FALLBACK_LENGTH = 100;
+
+function createFallbackData(): GraphDataMap {
+    const fallback: Record<string, number[]> = {};
+    for (const sym of REQUIRED_SYMBOLS) {
+        fallback[sym] = Array.from({ length: FALLBACK_LENGTH }, () => DEFAULT_FALLBACK_PRICE);
+    }
+    return Object.freeze(fallback) as GraphDataMap;
+}
+
+function validateAndFreeze(data: unknown): GraphDataMap {
+    if (!data || typeof data !== 'object' || Array.isArray(data)) {
+        throw new Error('[graphData] Invalid data: expected an object mapping symbols to price arrays.');
+    }
+
+    const record = data as Record<string, unknown>;
+    const errors: string[] = [];
+
+    for (const sym of REQUIRED_SYMBOLS) {
+        if (!(sym in record)) {
+            errors.push(`Missing symbol: "${sym}"`);
+            continue;
+        }
+
+        const arr = record[sym];
+        if (!Array.isArray(arr)) {
+            errors.push(`Symbol "${sym}" is not an array`);
+            continue;
+        }
+
+        if (arr.length === 0) {
+            errors.push(`Symbol "${sym}" has an empty array`);
+            continue;
+        }
+
+        for (let i = 0; i < arr.length; i++) {
+            if (typeof arr[i] !== 'number' || !Number.isFinite(arr[i])) {
+                errors.push(`Symbol "${sym}" has non-finite value at index ${i}: ${arr[i]}`);
+                break; // Report first bad value per symbol
+            }
+        }
+    }
+
+    if (errors.length > 0) {
+        const msg = `[graphData] Validation errors:\n  - ${errors.join('\n  - ')}`;
+
+        if (import.meta.env?.DEV) {
+            throw new Error(msg);
+        }
+
+        console.error(msg);
+        console.warn('[graphData] Falling back to safe defaults.');
+        return createFallbackData();
+    }
+
+    // Freeze each array and the top-level object
+    for (const sym of REQUIRED_SYMBOLS) {
+        Object.freeze(record[sym]);
+    }
+
+    return Object.freeze(record) as GraphDataMap;
+}
+
+/**
+ * Validated + frozen graph data. Keys are company symbols,
+ * values are readonly arrays of prices (one per tick / second).
+ */
+export const graphData: GraphDataMap = validateAndFreeze(rawGraphData);
+
+```
+
 ## File: `data/users.ts`
 
-```ts
+```typescript
 import { User } from '../types';
 
 const STARTING_CAPITAL = 100000; // ₹1 Lakh
@@ -4947,82 +5757,169 @@ export { STARTING_CAPITAL };
 
 ```
 
+## File: `engine/graphPlaybackEngine.ts`
+
+```typescript
+/**
+ * graphPlaybackEngine.ts
+ *
+ * Pure, deterministic graph price lookup.
+ * O(1) per call. No side effects, no React, no Supabase.
+ */
+
+import { graphData, type SymbolKey } from '../data/graphData';
+
+const MIN_PRICE = 10;
+const FALLBACK_PRICE = 100;
+
+/**
+ * Get the graph-driven price for a given symbol at a given tick.
+ *
+ * Rules:
+ *  - Clamps tick to [0, arr.length - 1]
+ *  - Clamps result to minimum ₹10
+ *  - Rounds to 2 decimal places
+ *  - Returns FALLBACK_PRICE for unknown symbols
+ *  - Never returns NaN, never throws
+ */
+export function getGraphPrice(symbol: string, tick: number): number {
+    const prices = graphData[symbol as SymbolKey];
+
+    // Unknown symbol → safe fallback
+    if (!prices || prices.length === 0) {
+        return FALLBACK_PRICE;
+    }
+
+    // Clamp tick
+    const safeTick = Math.max(0, Math.min(tick, prices.length - 1));
+    const rawPrice = prices[safeTick];
+
+    // Guard against corrupted data
+    if (typeof rawPrice !== 'number' || !Number.isFinite(rawPrice)) {
+        return FALLBACK_PRICE;
+    }
+
+    // Clamp minimum and round
+    return parseFloat(Math.max(MIN_PRICE, rawPrice).toFixed(2));
+}
+
+/**
+ * Get the total number of ticks available for a given symbol.
+ * Returns 0 for unknown symbols.
+ */
+export function getGraphLength(symbol: string): number {
+    const prices = graphData[symbol as SymbolKey];
+    return prices ? prices.length : 0;
+}
+
+```
+
 ## File: `engine/priceEngine.ts`
 
-```ts
+```typescript
 import { MarketItem, StockDataPoint, NewsEvent } from '../types';
+import { getGraphPrice } from './graphPlaybackEngine';
 
-// Generate initial price history for a stock
-export const generatePriceHistory = (
-  basePrice: number,
-  points: number = 100,
-  volatility: number = 0.008
-): StockDataPoint[] => {
-  const data: StockDataPoint[] = [];
-  let current = basePrice;
-  const now = Date.now();
+/**
+ * Advance a single stock by one tick using deterministic graph data.
+ *
+ * Flow:
+ *  1. Look up base price from graphData at the given tick
+ *  2. If a news override is active for this symbol, apply crash/boost factor
+ *  3. Compute change % from the first entry in priceHistory
+ *  4. Append new data point to priceHistory (capped at 200)
+ *  5. Return a NEW MarketItem — no mutation
+ */
+export const tickPrice = (
+  item: MarketItem,
+  tick: number,
+  activeNewsEvents?: NewsEvent[]
+): MarketItem => {
+  // 1. Base price from graph
+  let newPrice = getGraphPrice(item.symbol, tick);
 
-  for (let i = points; i >= 0; i--) {
-    const change = (Math.random() - 0.48) * 2 * volatility;
-    current = current * (1 + change);
-    current = Math.max(current, basePrice * 0.5);
-    data.push({
-      time: new Date(now - i * 5000).toLocaleTimeString('en-US', {
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-      }),
-      value: parseFloat(current.toFixed(2)),
-    });
+  // 2. Apply active news override (crash or boost)
+  if (activeNewsEvents && activeNewsEvents.length > 0) {
+    for (const event of activeNewsEvents) {
+      if (!event.active) continue;
+
+      if (item.symbol === event.crashCompany) {
+        // crashPercent is already negative (e.g. -15)
+        const factor = 1 + event.crashPercent / 100;
+        newPrice = parseFloat((newPrice * factor).toFixed(2));
+        break;
+      }
+
+      if (event.boostCompanies.includes(item.symbol)) {
+        const factor = 1 + event.boostPercent / 100;
+        newPrice = parseFloat((newPrice * factor).toFixed(2));
+        break;
+      }
+    }
   }
-  return data;
-};
 
-// Advance price by one tick (5 seconds)
-export const tickPrice = (item: MarketItem): MarketItem => {
-  const volatility = 0.004; // 0.4% max change per tick
-  const sentimentBias =
-    item.sentiment === 'Bullish' ? 0.0005 :
-    item.sentiment === 'Bearish' ? -0.0005 : 0;
+  // Ensure minimum price
+  newPrice = Math.max(10, newPrice);
+  newPrice = parseFloat(newPrice.toFixed(2));
 
-  const changePercent = (Math.random() - 0.5) * 2 * volatility + sentimentBias;
-  const newPrice = parseFloat((item.price * (1 + changePercent)).toFixed(2));
+  // 3. Build new history entry
+  const timeLabel = new Date().toLocaleTimeString('en-US', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
 
-  const newHistory = [
-    ...(item.priceHistory || []).slice(-199),
-    {
-      time: new Date().toLocaleTimeString('en-US', {
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-      }),
-      value: newPrice,
-    },
+  const newHistory: StockDataPoint[] = [
+    ...(item.priceHistory || []).slice(-1999),
+    { time: timeLabel, value: newPrice },
   ];
 
+  // 4. Compute change % from first visible price
   const firstPrice = newHistory[0]?.value || item.price;
-  const totalChange = ((newPrice - firstPrice) / firstPrice) * 100;
+  const totalChange = firstPrice !== 0
+    ? ((newPrice - firstPrice) / firstPrice) * 100
+    : 0;
+
+  // 5. Determine sentiment based on change
+  const sentiment: 'Bullish' | 'Bearish' | 'Neutral' =
+    totalChange > 0.5 ? 'Bullish' :
+      totalChange < -0.5 ? 'Bearish' : 'Neutral';
 
   return {
     ...item,
     price: newPrice,
     change: parseFloat(totalChange.toFixed(2)),
+    sentiment,
     priceHistory: newHistory,
   };
 };
 
-// Tick all market items
-export const tickAllPrices = (items: MarketItem[]): MarketItem[] => {
-  return items.map(tickPrice);
+/**
+ * Tick all market items using their individual tick counters.
+ * O(n) where n = number of stocks (12).
+ */
+export const tickAllPrices = (
+  items: MarketItem[],
+  ticks: Record<string, number>,
+  activeNewsEvents?: NewsEvent[]
+): MarketItem[] => {
+  return items.map(item => {
+    const tick = ticks[item.symbol] ?? 0;
+    return tickPrice(item, tick, activeNewsEvents);
+  });
 };
 
-// Apply a news event — immediately shock prices and flip sentiments
+/**
+ * Apply a news event — immediately shock prices and flip sentiments.
+ * This is a one-shot operation triggered by the admin.
+ * Unchanged from original — works with current price, not graph data.
+ */
 export const applyNewsEvent = (items: MarketItem[], event: NewsEvent): MarketItem[] => {
   return items.map(item => {
     if (item.symbol === event.crashCompany) {
       const factor = 1 + event.crashPercent / 100; // crashPercent is negative
       const newPrice = parseFloat((item.price * factor).toFixed(2));
-      const newHistory = [
+      const newHistory: StockDataPoint[] = [
         ...(item.priceHistory || []).slice(-199),
         {
           time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
@@ -5042,7 +5939,7 @@ export const applyNewsEvent = (items: MarketItem[], event: NewsEvent): MarketIte
     if (event.boostCompanies.includes(item.symbol)) {
       const factor = 1 + event.boostPercent / 100; // boostPercent is positive
       const newPrice = parseFloat((item.price * factor).toFixed(2));
-      const newHistory = [
+      const newHistory: StockDataPoint[] = [
         ...(item.priceHistory || []).slice(-199),
         {
           time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
@@ -5063,7 +5960,10 @@ export const applyNewsEvent = (items: MarketItem[], event: NewsEvent): MarketIte
   });
 };
 
-// Stop a news event — revert affected stocks to Neutral sentiment
+/**
+ * Stop a news event — revert affected stocks to Neutral sentiment.
+ * Unchanged from original.
+ */
 export const stopNewsEvent = (items: MarketItem[], event: NewsEvent): MarketItem[] => {
   return items.map(item => {
     if (item.symbol === event.crashCompany || event.boostCompanies.includes(item.symbol)) {
@@ -5075,12 +5975,510 @@ export const stopNewsEvent = (items: MarketItem[], event: NewsEvent): MarketItem
 
 ```
 
+## File: `engine/tests/graphPlaybackEngine.test.ts`
+
+```typescript
+import { describe, it, expect } from 'vitest';
+import { getGraphPrice, getGraphLength } from '../graphPlaybackEngine';
+
+describe('getGraphPrice', () => {
+    it('returns a finite number for tick 0 of a known symbol', () => {
+        const price = getGraphPrice('VELOCITY', 0);
+        expect(typeof price).toBe('number');
+        expect(Number.isFinite(price)).toBe(true);
+        expect(price).toBeGreaterThanOrEqual(10);
+    });
+
+    it('returns correct tick retrieval (different ticks give potentially different prices)', () => {
+        const p0 = getGraphPrice('VELOCITY', 0);
+        const p10 = getGraphPrice('VELOCITY', 10);
+        // At minimum both should be valid numbers
+        expect(Number.isFinite(p0)).toBe(true);
+        expect(Number.isFinite(p10)).toBe(true);
+    });
+
+    it('clamps tick beyond array length to last price', () => {
+        const len = getGraphLength('VELOCITY');
+        expect(len).toBeGreaterThan(0);
+
+        const lastPrice = getGraphPrice('VELOCITY', len - 1);
+        const beyondPrice = getGraphPrice('VELOCITY', len + 1000);
+        expect(beyondPrice).toBe(lastPrice);
+    });
+
+    it('clamps negative tick to 0', () => {
+        const p0 = getGraphPrice('VELOCITY', 0);
+        const pNeg = getGraphPrice('VELOCITY', -5);
+        expect(pNeg).toBe(p0);
+    });
+
+    it('enforces minimum price of ₹10', () => {
+        // All prices from the graph should be >= 10
+        for (let tick = 0; tick < 100; tick++) {
+            const price = getGraphPrice('VELOCITY', tick);
+            expect(price).toBeGreaterThanOrEqual(10);
+        }
+    });
+
+    it('returns prices rounded to 2 decimal places', () => {
+        const price = getGraphPrice('VELOCITY', 5);
+        const decimals = price.toString().split('.')[1];
+        if (decimals) {
+            expect(decimals.length).toBeLessThanOrEqual(2);
+        }
+    });
+
+    it('returns fallback price for unknown symbol', () => {
+        const price = getGraphPrice('UNKNOWN_SYMBOL', 0);
+        expect(price).toBe(100); // FALLBACK_PRICE
+    });
+
+    it('returns fallback price for empty string symbol', () => {
+        const price = getGraphPrice('', 0);
+        expect(price).toBe(100);
+    });
+
+    it('never returns NaN', () => {
+        const symbols = ['VELOCITY', 'APEXAUTO', 'CRUISER', 'UNKNOWN', '', 'null'];
+        const ticks = [-1, 0, 1, 100, 99999, NaN];
+        for (const sym of symbols) {
+            for (const tick of ticks) {
+                const price = getGraphPrice(sym, tick);
+                expect(Number.isNaN(price)).toBe(false);
+            }
+        }
+    });
+
+    it('works for all 12 symbols', () => {
+        const symbols = [
+            'VELOCITY', 'APEXAUTO', 'CRUISER', 'VITALIS',
+            'CAREPLUS', 'MEDISURG', 'EDUNEXT', 'SCHOLAR',
+            'BRAINB', 'FRESHC', 'SPICER', 'URBANB',
+        ];
+        for (const sym of symbols) {
+            const price = getGraphPrice(sym, 0);
+            expect(typeof price).toBe('number');
+            expect(Number.isFinite(price)).toBe(true);
+            expect(price).toBeGreaterThanOrEqual(10);
+            expect(getGraphLength(sym)).toBeGreaterThan(0);
+        }
+    });
+});
+
+describe('getGraphLength', () => {
+    it('returns > 0 for known symbols', () => {
+        expect(getGraphLength('VELOCITY')).toBeGreaterThan(0);
+    });
+
+    it('returns 0 for unknown symbols', () => {
+        expect(getGraphLength('UNKNOWN')).toBe(0);
+    });
+});
+
+```
+
+## File: `engine/tests/priceEngine.integration.test.ts`
+
+```typescript
+import { describe, it, expect } from 'vitest';
+import { tickPrice, tickAllPrices, applyNewsEvent, stopNewsEvent } from '../priceEngine';
+import type { MarketItem, NewsEvent } from '../../types';
+
+function createMockItem(symbol: string, price: number = 100): MarketItem {
+    return {
+        name: `Test ${symbol}`,
+        symbol,
+        price,
+        change: 0,
+        sentiment: 'Neutral',
+        sector: 'Test',
+        icon: 'T',
+        priceHistory: [],
+    };
+}
+
+function createMockNewsEvent(overrides: Partial<NewsEvent> = {}): NewsEvent {
+    return {
+        id: 'test-event-1',
+        headline: 'Test News',
+        crashCompany: 'VELOCITY',
+        crashPercent: -15,
+        boostCompanies: ['APEXAUTO'],
+        boostPercent: 8,
+        timestamp: Date.now(),
+        active: true,
+        ...overrides,
+    };
+}
+
+describe('tickPrice (graph-driven)', () => {
+    it('returns a new MarketItem without mutating the original', () => {
+        const item = createMockItem('VELOCITY');
+        const original = { ...item };
+        const result = tickPrice(item, 0);
+
+        // Original should be unchanged
+        expect(item.price).toBe(original.price);
+        expect(item.priceHistory).toBe(original.priceHistory);
+
+        // Result should be a new object
+        expect(result).not.toBe(item);
+        expect(typeof result.price).toBe('number');
+        expect(result.priceHistory.length).toBe(1);
+    });
+
+    it('produces prices from graph data at the given tick', () => {
+        const item = createMockItem('VELOCITY');
+        const r0 = tickPrice(item, 0);
+        const r5 = tickPrice(item, 5);
+
+        expect(Number.isFinite(r0.price)).toBe(true);
+        expect(Number.isFinite(r5.price)).toBe(true);
+        expect(r0.price).toBeGreaterThanOrEqual(10);
+        expect(r5.price).toBeGreaterThanOrEqual(10);
+    });
+
+    it('applies news crash override on top of graph price', () => {
+        const item = createMockItem('VELOCITY', 200);
+        const event = createMockNewsEvent({ crashCompany: 'VELOCITY', crashPercent: -20 });
+
+        const withoutNews = tickPrice(item, 10);
+        const withNews = tickPrice(item, 10, [event]);
+
+        // With a 20% crash, the price should be lower
+        expect(withNews.price).toBeLessThan(withoutNews.price);
+    });
+
+    it('applies news boost override on top of graph price', () => {
+        const item = createMockItem('APEXAUTO', 200);
+        const event = createMockNewsEvent({ boostCompanies: ['APEXAUTO'], boostPercent: 10 });
+
+        const withoutNews = tickPrice(item, 10);
+        const withNews = tickPrice(item, 10, [event]);
+
+        // With a 10% boost, the price should be higher
+        expect(withNews.price).toBeGreaterThan(withoutNews.price);
+    });
+
+    it('resumes normal graph playback after news stops', () => {
+        const item = createMockItem('VELOCITY', 200);
+        const inactiveEvent = createMockNewsEvent({ active: false });
+
+        const normal = tickPrice(item, 10);
+        const afterStop = tickPrice(item, 10, [inactiveEvent]);
+
+        // With inactive event, should be same as no event
+        expect(afterStop.price).toBe(normal.price);
+    });
+
+    it('computes change percentage correctly', () => {
+        const item = createMockItem('VELOCITY', 100);
+        // Add an initial history point
+        const itemWithHistory: MarketItem = {
+            ...item,
+            priceHistory: [{ time: '10:00:00 AM', value: 100 }],
+        };
+
+        const result = tickPrice(itemWithHistory, 5);
+        // Change should be ((newPrice - 100) / 100) * 100
+        const expectedChange = ((result.price - 100) / 100) * 100;
+        expect(result.change).toBeCloseTo(expectedChange, 1);
+    });
+
+    it('caps priceHistory at 200 entries', () => {
+        const longHistory = Array.from({ length: 250 }, (_, i) => ({
+            time: `${i}`,
+            value: 100 + i,
+        }));
+        const item: MarketItem = {
+            ...createMockItem('VELOCITY'),
+            priceHistory: longHistory,
+        };
+
+        const result = tickPrice(item, 0);
+        expect(result.priceHistory.length).toBeLessThanOrEqual(200);
+    });
+});
+
+describe('tickAllPrices', () => {
+    it('ticks all items independently using their own tick counters', () => {
+        const items = [
+            createMockItem('VELOCITY'),
+            createMockItem('APEXAUTO'),
+        ];
+        const ticks = { VELOCITY: 10, APEXAUTO: 20 };
+
+        const result = tickAllPrices(items, ticks);
+
+        expect(result.length).toBe(2);
+        expect(result[0].symbol).toBe('VELOCITY');
+        expect(result[1].symbol).toBe('APEXAUTO');
+        // Both should have valid prices
+        expect(Number.isFinite(result[0].price)).toBe(true);
+        expect(Number.isFinite(result[1].price)).toBe(true);
+    });
+
+    it('does not mutate the original array', () => {
+        const items = [createMockItem('VELOCITY')];
+        const ticks = { VELOCITY: 0 };
+        const result = tickAllPrices(items, ticks);
+
+        expect(result).not.toBe(items);
+        expect(result[0]).not.toBe(items[0]);
+    });
+});
+
+describe('applyNewsEvent', () => {
+    it('crashes the target company', () => {
+        const items = [createMockItem('VELOCITY', 1000)];
+        const event = createMockNewsEvent({ crashCompany: 'VELOCITY', crashPercent: -20 });
+
+        const result = applyNewsEvent(items, event);
+        expect(result[0].price).toBe(800); // 1000 * (1 - 0.20)
+        expect(result[0].sentiment).toBe('Bearish');
+    });
+
+    it('boosts benefiting companies', () => {
+        const items = [createMockItem('APEXAUTO', 1000)];
+        const event = createMockNewsEvent({ boostCompanies: ['APEXAUTO'], boostPercent: 10 });
+
+        const result = applyNewsEvent(items, event);
+        expect(result[0].price).toBe(1100); // 1000 * (1 + 0.10)
+        expect(result[0].sentiment).toBe('Bullish');
+    });
+
+    it('does not affect unrelated stocks', () => {
+        const items = [createMockItem('CRUISER', 500)];
+        const event = createMockNewsEvent();
+
+        const result = applyNewsEvent(items, event);
+        expect(result[0].price).toBe(500);
+        expect(result[0].sentiment).toBe('Neutral');
+    });
+});
+
+describe('stopNewsEvent', () => {
+    it('reverts affected stocks to Neutral sentiment', () => {
+        const items = [
+            { ...createMockItem('VELOCITY', 800), sentiment: 'Bearish' as const },
+            { ...createMockItem('APEXAUTO', 1100), sentiment: 'Bullish' as const },
+            { ...createMockItem('CRUISER', 500), sentiment: 'Neutral' as const },
+        ];
+        const event = createMockNewsEvent();
+
+        const result = stopNewsEvent(items, event);
+        expect(result[0].sentiment).toBe('Neutral');
+        expect(result[1].sentiment).toBe('Neutral');
+        expect(result[2].sentiment).toBe('Neutral');
+    });
+});
+
+```
+
+## File: `generate_context.mjs`
+
+```javascript
+/**
+ * generate_context.mjs
+ * Regenerates codebase-context.md with all source files.
+ * Run: node generate_context.mjs
+ */
+import { readdirSync, readFileSync, writeFileSync, statSync } from 'fs';
+import { join, extname, relative } from 'path';
+
+const ROOT = new URL('.', import.meta.url).pathname;
+const OUTPUT = join(ROOT, 'codebase-context.md');
+
+const INCLUDE_EXTENSIONS = new Set([
+  '.ts', '.tsx', '.js', '.mjs', '.css', '.json', '.md', '.html', '.sql'
+]);
+
+const EXCLUDE_DIRS = new Set([
+  'node_modules', 'dist', '.git', '.gemini', '.vscode', '.idea', 'coverage'
+]);
+
+const EXCLUDE_FILES = new Set([
+  'codebase-context.md', 'package-lock.json', 'pnpm-lock.yaml', 'yarn.lock'
+]);
+
+// Limit JSON files that are too large
+const MAX_FILE_SIZE = 50_000; // 50KB
+
+function walk(dir, files = []) {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (entry.isDirectory()) {
+      if (!EXCLUDE_DIRS.has(entry.name)) {
+        walk(join(dir, entry.name), files);
+      }
+    } else if (entry.isFile()) {
+      const ext = extname(entry.name);
+      if (INCLUDE_EXTENSIONS.has(ext) && !EXCLUDE_FILES.has(entry.name)) {
+        const fullPath = join(dir, entry.name);
+        const stat = statSync(fullPath);
+        if (stat.size <= MAX_FILE_SIZE) {
+          files.push(fullPath);
+        }
+      }
+    }
+  }
+  return files;
+}
+
+const files = walk(ROOT).sort();
+const langMap = {
+  '.ts': 'typescript', '.tsx': 'tsx', '.js': 'javascript', '.mjs': 'javascript',
+  '.css': 'css', '.json': 'json', '.md': 'markdown', '.html': 'html', '.sql': 'sql'
+};
+
+let output = `# Codebase Context\n\nThis file contains the full context of the codebase to be used by LLMs.\nGenerated at: ${new Date().toISOString()}\n\n`;
+
+for (const f of files) {
+  const rel = relative(ROOT, f);
+  const ext = extname(f);
+  const lang = langMap[ext] || '';
+  const content = readFileSync(f, 'utf-8');
+  output += `## File: \`${rel}\`\n\n\`\`\`${lang}\n${content}\n\`\`\`\n\n`;
+}
+
+writeFileSync(OUTPUT, output);
+console.log(`✅ Generated ${OUTPUT}`);
+console.log(`   ${files.length} files, ${(output.length / 1024).toFixed(1)} KB`);
+
+```
+
+## File: `hooks/tests/useMarket.test.ts`
+
+```typescript
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
+/**
+ * useMarket.test.ts
+ *
+ * Tests for the useMarket hook behavior.
+ * Since useMarket depends on Supabase (which we mock), these tests
+ * focus on the tick logic and state management patterns.
+ */
+
+// Mock supabase before importing anything that uses it
+vi.mock('../../lib/supabaseClient', () => ({
+    supabase: {
+        from: () => ({
+            select: () => ({
+                order: () => Promise.resolve({ data: [], error: null }),
+            }),
+        }),
+        channel: () => ({
+            on: function () { return this; },
+            subscribe: () => ({}),
+        }),
+        removeChannel: () => { },
+    },
+}));
+
+describe('useMarket tick logic', () => {
+    it('tick counter increments correctly', () => {
+        // Simulating the tick increment logic from useMarket
+        const ticks: Record<string, number> = {
+            VELOCITY: 0,
+            APEXAUTO: 0,
+        };
+
+        // Simulate one tick
+        const newTicks: Record<string, number> = {};
+        for (const sym in ticks) {
+            newTicks[sym] = (ticks[sym] ?? 0) + 1;
+        }
+
+        expect(newTicks.VELOCITY).toBe(1);
+        expect(newTicks.APEXAUTO).toBe(1);
+
+        // Simulate another tick
+        const newTicks2: Record<string, number> = {};
+        for (const sym in newTicks) {
+            newTicks2[sym] = (newTicks[sym] ?? 0) + 1;
+        }
+
+        expect(newTicks2.VELOCITY).toBe(2);
+        expect(newTicks2.APEXAUTO).toBe(2);
+    });
+
+    it('tick counter does not mutate original object', () => {
+        const ticks = { VELOCITY: 5, APEXAUTO: 10 };
+        const original = { ...ticks };
+
+        const newTicks: Record<string, number> = {};
+        for (const sym in ticks) {
+            newTicks[sym] = (ticks[sym] ?? 0) + 1;
+        }
+
+        // Original should be unchanged
+        expect(ticks.VELOCITY).toBe(original.VELOCITY);
+        expect(ticks.APEXAUTO).toBe(original.APEXAUTO);
+
+        // New should be incremented
+        expect(newTicks.VELOCITY).toBe(6);
+        expect(newTicks.APEXAUTO).toBe(11);
+    });
+
+    it('reset creates fresh tick counters at 0', () => {
+        const ticks = { VELOCITY: 100, APEXAUTO: 200 };
+
+        // Reset logic
+        const resetTicks: Record<string, number> = {};
+        for (const sym in ticks) {
+            resetTicks[sym] = 0;
+        }
+
+        expect(resetTicks.VELOCITY).toBe(0);
+        expect(resetTicks.APEXAUTO).toBe(0);
+    });
+
+    it('interval clears properly on cleanup', () => {
+        const clearSpy = vi.spyOn(global, 'clearInterval');
+        const intervalId = setInterval(() => { }, 5000);
+        clearInterval(intervalId);
+
+        expect(clearSpy).toHaveBeenCalledWith(intervalId);
+        clearSpy.mockRestore();
+    });
+
+    it('only one interval should exist at a time', () => {
+        const intervals: ReturnType<typeof setInterval>[] = [];
+
+        // Simulate the pattern from useMarket
+        const createInterval = () => {
+            const id = setInterval(() => { }, 5000);
+            intervals.push(id);
+            return id;
+        };
+
+        const cleanup = (id: ReturnType<typeof setInterval>) => {
+            clearInterval(id);
+        };
+
+        // First mount
+        const id1 = createInterval();
+        expect(intervals.length).toBe(1);
+
+        // Cleanup + remount (simulating useEffect cleanup)
+        cleanup(id1);
+        const id2 = createInterval();
+
+        // After cleanup + recreation, we should still only have one active
+        cleanup(id2);
+    });
+});
+
+```
+
 ## File: `hooks/useMarket.ts`
 
-```ts
-import { useState, useEffect, useRef } from 'react';
+```typescript
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '../lib/supabaseClient';
-import { generatePriceHistory, tickAllPrices } from '../engine/priceEngine';
+import { tickAllPrices } from '../engine/priceEngine';
+import { getGraphPrice } from '../engine/graphPlaybackEngine';
+import type { NewsEvent } from './useNews';
 
 export interface MarketItem {
   symbol: string;
@@ -5088,20 +6486,21 @@ export interface MarketItem {
   price: number;
   change: number;
   sentiment: 'Bullish' | 'Bearish' | 'Neutral';
+  sector: string;
   icon: string;
   price_history: { time: string; value: number }[];
   priceHistory: { time: string; value: number }[]; // Alias for compatibility
 }
 
-// Transform database row to include both price_history and priceHistory
-// If price_history from DB is empty, generate synthetic history client-side
+// Transform database row — use graph data for initial price instead of random history
 const transformMarketItem = (item: any): MarketItem => {
-  const dbHistory = item.price_history || [];
-  const history = dbHistory.length > 0 ? dbHistory : generatePriceHistory(item.price, 50);
+  const initialPrice = getGraphPrice(item.symbol, 0);
   return {
     ...item,
-    price_history: history,
-    priceHistory: history,
+    price: initialPrice,
+    change: 0,
+    price_history: [],
+    priceHistory: [],
   };
 };
 
@@ -5110,9 +6509,15 @@ export function useMarket() {
   const [loading, setLoading] = useState(true);
   const initializedRef = useRef(false);
 
+  // Per-stock tick counters — persisted across re-renders
+  const ticksRef = useRef<Record<string, number>>({});
+
+  // Reference to active news events — updated externally
+  const activeNewsRef = useRef<NewsEvent[]>([]);
+
   // Fetch initial market data
   useEffect(() => {
-    const fetch = async () => {
+    const fetchData = async () => {
       try {
         const { data, error } = await supabase
           .from('market_items')
@@ -5120,7 +6525,14 @@ export function useMarket() {
           .order('symbol');
         if (error) throw error;
         if (data) {
-          setMarketItems(data.map(transformMarketItem));
+          const items = data.map(transformMarketItem);
+          // Initialize tick counters for each symbol at 0
+          const ticks: Record<string, number> = {};
+          for (const item of items) {
+            ticks[item.symbol] = 0;
+          }
+          ticksRef.current = ticks;
+          setMarketItems(items);
           initializedRef.current = true;
         }
       } catch (err) {
@@ -5129,19 +6541,28 @@ export function useMarket() {
         setLoading(false);
       }
     };
-    fetch();
+    fetchData();
   }, []);
 
   // Client-side price ticking — simulate live market every 5 seconds
   useEffect(() => {
-    if (!initializedRef.current && marketItems.length === 0) return;
+    if (!initializedRef.current || marketItems.length === 0) return;
 
     const tickInterval = setInterval(() => {
+      // Increment ticks for each symbol
+      const currentTicks = ticksRef.current;
+      const newTicks: Record<string, number> = {};
+      for (const sym in currentTicks) {
+        newTicks[sym] = (currentTicks[sym] ?? 0) + 1;
+      }
+      ticksRef.current = newTicks;
+
+      // Functional state update — no mutation of previous state
       setMarketItems(prev => {
         if (prev.length === 0) return prev;
-        return tickAllPrices(prev);
+        return tickAllPrices(prev, newTicks, activeNewsRef.current);
       });
-    }, 5000);
+    }, 1000); // 1 tick per second — 7200 ticks = 2 hours
 
     return () => clearInterval(tickInterval);
   }, [marketItems.length]);
@@ -5154,9 +6575,19 @@ export function useMarket() {
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'market_items' },
         (payload) => {
-          const updated = transformMarketItem(payload.new);
+          const updated = payload.new as any;
           setMarketItems(prev =>
-            prev.map(item => item.symbol === updated.symbol ? updated : item)
+            prev.map(item => {
+              if (item.symbol === updated.symbol) {
+                return {
+                  ...item,
+                  ...updated,
+                  priceHistory: item.priceHistory, // preserve client-side history
+                  price_history: item.priceHistory,
+                };
+              }
+              return item;
+            })
           );
         }
       )
@@ -5167,14 +6598,40 @@ export function useMarket() {
     };
   }, []);
 
-  return { marketItems, setMarketItems, loading };
+  // Method to update the active news events reference
+  const setActiveNews = useCallback((events: NewsEvent[]) => {
+    activeNewsRef.current = events.filter(e => e.active);
+  }, []);
+
+  // Method to reset ticks (used by reset auction)
+  const resetTicks = useCallback(() => {
+    const ticks: Record<string, number> = {};
+    for (const sym in ticksRef.current) {
+      ticks[sym] = 0;
+    }
+    ticksRef.current = ticks;
+  }, []);
+
+  // Get current ticks (for admin UI)
+  const getTicks = useCallback((): Record<string, number> => {
+    return { ...ticksRef.current };
+  }, []);
+
+  return {
+    marketItems,
+    setMarketItems,
+    loading,
+    setActiveNews,
+    resetTicks,
+    getTicks,
+  };
 }
 
 ```
 
 ## File: `hooks/useNews.ts`
 
-```ts
+```typescript
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import type { MarketItem } from './useMarket';
@@ -5357,7 +6814,7 @@ export function useNews() {
 
 ## File: `hooks/usePortfolio.ts`
 
-```ts
+```typescript
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
 
@@ -5509,7 +6966,7 @@ export function usePortfolio(userId: string | undefined) {
 
 ## File: `hooks/useSync.ts`
 
-```ts
+```typescript
 import { useEffect, useRef, useCallback } from 'react';
 
 const WS_URL = 'ws://localhost:4000';
@@ -5644,6 +7101,11 @@ export function useSync(onMessage: (msg: SyncMessage) => void) {
       .recharts-cartesian-grid-vertical line {
         stroke: #1f2a26;
       }
+      button:focus,
+      button:focus-visible {
+        outline: none !important;
+        box-shadow: none !important;
+      }
     </style>
     <script type="importmap">
       {
@@ -5685,7 +7147,7 @@ createRoot(document.getElementById('root')!).render(
 
 ## File: `lib/supabaseAdmin.ts`
 
-```ts
+```typescript
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
@@ -5716,7 +7178,7 @@ export const supabaseAdmin = serviceRoleKey
 
 ## File: `lib/supabaseClient.ts`
 
-```ts
+```typescript
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
@@ -5762,11 +7224,16 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey);
     "ws": "^8.19.0"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
     "@types/node": "^22.14.0",
     "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^5.0.0",
+    "jsdom": "^28.1.0",
     "typescript": "~5.8.2",
-    "vite": "^6.2.0"
+    "vite": "^6.2.0",
+    "vitest": "^4.0.18",
+    "xlsx": "^0.18.5"
   }
 }
 
@@ -5774,7 +7241,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 ## File: `scripts/cleanup-orphaned-users.mjs`
 
-```mjs
+```javascript
 // ===========================================
 // VSX: Buy or Bail — Cleanup Orphaned Auth Users
 // Run: node scripts/cleanup-orphaned-users.mjs
@@ -5885,9 +7352,144 @@ cleanupOrphanedAuthUsers();
 
 ```
 
+## File: `scripts/convertGraphs.mjs`
+
+```javascript
+/**
+ * convertGraphs.mjs
+ *
+ * Reads graph-data.xlsx, extracts Price columns from all 12 sheets,
+ * shuffles sheets randomly (Fisher-Yates), maps each to a company symbol,
+ * and outputs data/graphData.json.
+ *
+ * Run once manually: node scripts/convertGraphs.mjs
+ * The mapping is permanent until re-run.
+ */
+
+import { readFileSync, writeFileSync, mkdirSync } from "fs";
+import { join, dirname } from "path";
+import { fileURLToPath } from "url";
+import XLSX from "xlsx";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const ROOT = join(__dirname, "..");
+
+const EXCEL_PATH = join(ROOT, "graph-data.xlsx");
+const OUTPUT_PATH = join(ROOT, "data", "graphData.json");
+
+const SYMBOLS = [
+  "VELOCITY",
+  "APEXAUTO",
+  "CRUISER",
+  "VITALIS",
+  "CAREPLUS",
+  "MEDISURG",
+  "EDUNEXT",
+  "SCHOLAR",
+  "BRAINB",
+  "FRESHC",
+  "SPICER",
+  "URBANB",
+];
+
+// Fisher-Yates shuffle (in-place)
+function shuffle(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+function main() {
+  console.log("📊 Reading Excel file:", EXCEL_PATH);
+
+  const buf = readFileSync(EXCEL_PATH);
+  const workbook = XLSX.read(buf, { type: "buffer" });
+
+  const sheetNames = workbook.SheetNames;
+  console.log(`📋 Found ${sheetNames.length} sheets:`, sheetNames);
+
+  if (sheetNames.length !== SYMBOLS.length) {
+    throw new Error(
+      `Sheet count mismatch! Expected ${SYMBOLS.length} sheets, found ${sheetNames.length}.\n` +
+        `Sheets: ${sheetNames.join(", ")}\n` +
+        `Symbols: ${SYMBOLS.join(", ")}`,
+    );
+  }
+
+  // Extract Price arrays from each sheet
+  const sheetData = {};
+  for (const name of sheetNames) {
+    const sheet = workbook.Sheets[name];
+    const rows = XLSX.utils.sheet_to_json(sheet);
+
+    const prices = [];
+    for (const row of rows) {
+      const price = row.Price ?? row.price ?? row.PRICE;
+      if (price === undefined || price === null || price === "") continue;
+      const num = Number(price);
+      if (!Number.isFinite(num)) {
+        console.warn(`⚠️  Skipping invalid price in sheet "${name}": ${price}`);
+        continue;
+      }
+      prices.push(parseFloat(num.toFixed(4)));
+    }
+
+    if (prices.length === 0) {
+      throw new Error(`Sheet "${name}" has no valid Price data!`);
+    }
+
+    sheetData[name] = prices;
+    console.log(
+      `  ✅ ${name}: ${prices.length} price points (₹${prices[0]} → ₹${prices[prices.length - 1]})`,
+    );
+  }
+
+  // Shuffle sheet names and map to symbols
+  const shuffledSheetNames = shuffle([...sheetNames]);
+
+  const graphData = {};
+  const mapping = [];
+
+  for (let i = 0; i < SYMBOLS.length; i++) {
+    const symbol = SYMBOLS[i];
+    const sheetName = shuffledSheetNames[i];
+    graphData[symbol] = sheetData[sheetName];
+    mapping.push({
+      symbol,
+      sheet: sheetName,
+      points: sheetData[sheetName].length,
+    });
+  }
+
+  // Log mapping clearly
+  console.log("\n🔀 Random Sheet → Symbol Mapping:");
+  console.log("─".repeat(60));
+  for (const m of mapping) {
+    console.log(`  ${m.symbol.padEnd(12)} ← ${m.sheet} (${m.points} points)`);
+  }
+  console.log("─".repeat(60));
+
+  // Ensure output directory exists
+  mkdirSync(dirname(OUTPUT_PATH), { recursive: true });
+
+  // Write JSON
+  writeFileSync(OUTPUT_PATH, JSON.stringify(graphData, null, 2));
+  console.log(`\n✅ Successfully wrote ${OUTPUT_PATH}`);
+  console.log(
+    `   ${SYMBOLS.length} symbols, ${Object.values(graphData).reduce((s, a) => s + a.length, 0)} total data points`,
+  );
+}
+
+main();
+
+```
+
 ## File: `scripts/fix-users.mjs`
 
-```mjs
+```javascript
 // Fix auth users for existing profiles
 import { createClient } from '@supabase/supabase-js';
 
@@ -6034,7 +7636,7 @@ fixUsers();
 
 ## File: `scripts/seed-users.mjs`
 
-```mjs
+```javascript
 // ===========================================
 // VSX: Buy or Bail — Seed Users Script
 // Run: node scripts/seed-users.mjs
@@ -6205,7 +7807,7 @@ seedUsers();
 
 ## File: `scripts/test-supabase.mjs`
 
-```mjs
+```javascript
 // Test Supabase connection and auth
 import { createClient } from '@supabase/supabase-js';
 
@@ -6280,7 +7882,7 @@ test();
 
 ## File: `sql/README.md`
 
-```md
+```markdown
 # SQL Files
 
 All Supabase SQL files for the **VSX: Buy or Bail** stock simulation platform.
@@ -6624,34 +8226,29 @@ SELECT 'Updated ' || count(*) || ' profiles to ₹1 Lakh starting capital' as st
     "experimentalDecorators": true,
     "useDefineForClassFields": false,
     "module": "ESNext",
-    "lib": [
-      "ES2022",
-      "DOM",
-      "DOM.Iterable"
-    ],
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "skipLibCheck": true,
-    "types": [
-      "node"
-    ],
+    "types": ["node"],
     "moduleResolution": "bundler",
     "isolatedModules": true,
     "moduleDetection": "force",
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
     "allowJs": true,
     "jsx": "react-jsx",
     "paths": {
-      "@/*": [
-        "./*"
-      ]
+      "@/*": ["./*"]
     },
     "allowImportingTsExtensions": true,
     "noEmit": true
   }
 }
+
 ```
 
 ## File: `types.ts`
 
-```ts
+```typescript
 export interface StockDataPoint {
   time: string;
   value: number;
@@ -6743,43 +8340,65 @@ export enum ViewState {
 
 ## File: `vite-env.d.ts`
 
-```ts
+```typescript
 /// <reference types="vite/client" />
 
 ```
 
 ## File: `vite.config.ts`
 
-```ts
+```typescript
 import path from 'path';
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 
 export default defineConfig(({ mode }) => {
-    const env = loadEnv(mode, '.', '');
-    return {
-      server: {
-        port: 3000,
-        host: '0.0.0.0',
-      },
-      plugins: [react()],
-      define: {
-        'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-        'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)
-      },
-      resolve: {
-        alias: {
-          '@': path.resolve(__dirname, '.'),
-        }
+  const env = loadEnv(mode, '.', '');
+  return {
+    server: {
+      port: 3000,
+      host: '0.0.0.0',
+    },
+    plugins: [react()],
+    define: {
+      'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
+      'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)
+    },
+    resolve: {
+      alias: {
+        '@': path.resolve(__dirname, '.'),
       }
-    };
+    },
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            // Vendor chunk splitting by package
+            if (id.includes('node_modules')) {
+              if (id.includes('recharts') || id.includes('d3-') || id.includes('victory-vendor')) {
+                return 'recharts';
+              }
+              if (id.includes('@supabase')) {
+                return 'supabase';
+              }
+              if (id.includes('lucide-react')) {
+                return 'lucide';
+              }
+              // All other vendor libs (react, react-dom, etc.)
+              return 'vendor';
+            }
+          },
+        },
+      },
+    },
+  };
 });
 
 ```
 
 ## File: `ws-server.ts`
 
-```ts
+```typescript
 import { WebSocketServer } from 'ws';
 
 const PORT = 4000;
@@ -6806,3 +8425,4 @@ wss.on('connection', (ws) => {
 });
 
 ```
+

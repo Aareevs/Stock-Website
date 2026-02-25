@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, Suspense, lazy } from "react";
 import { Sidebar } from "./Sidebar";
 import { Card } from "../ui/Card";
 import { MainChart, MiniSparkline, SentimentChart } from "./Charts";
@@ -21,7 +21,11 @@ import {
 } from "lucide-react";
 import { Button } from "../ui/Button";
 import { TradeModal } from "./TradeModal";
-import { StockDetailChart } from "./StockDetailChart";
+
+// Lazy-load stock detail chart (contains Recharts)
+const StockDetailChart = lazy(() =>
+  import("./StockDetailChart").then((m) => ({ default: m.StockDetailChart })),
+);
 import type { Profile } from "../auth/AuthProvider";
 import type { MarketItem } from "../../hooks/useMarket";
 import type { NewsEvent } from "../../hooks/useNews";
@@ -136,8 +140,14 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
     return acc + (item.amount ?? 0) * currentPrice;
   }, 0);
 
-  // If viewing a stock detail chart
-  if (selectedStock) {
+  // If viewing a stock detail chart, look up the LIVE version from marketItems
+  // so it updates in real-time (instead of using the stale snapshot)
+  const liveSelectedStock = selectedStock
+    ? (marketItems.find((m) => m.symbol === selectedStock.symbol) ??
+      selectedStock)
+    : null;
+
+  if (liveSelectedStock) {
     return (
       <div className="flex min-h-screen bg-background text-textMain">
         <Sidebar
@@ -150,19 +160,27 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
           currentUserName={profile.display_name}
         />
         <main className="flex-1 p-4 md:p-8 overflow-y-auto max-h-screen">
-          <StockDetailChart
-            stock={selectedStock}
-            onBack={() => setSelectedStock(null)}
-            ownedQty={
-              portfolio.find((p) => p.symbol === selectedStock.symbol)
-                ?.amount || 0
+          <Suspense
+            fallback={
+              <div className="text-textMuted text-center py-10 animate-pulse">
+                Loading chart...
+              </div>
             }
-            avgPrice={
-              portfolio.find((p) => p.symbol === selectedStock.symbol)
-                ?.avg_price || 0
-            }
-            onTrade={() => handleOpenTrade(selectedStock)}
-          />
+          >
+            <StockDetailChart
+              stock={liveSelectedStock}
+              onBack={() => setSelectedStock(null)}
+              ownedQty={
+                portfolio.find((p) => p.symbol === liveSelectedStock.symbol)
+                  ?.amount || 0
+              }
+              avgPrice={
+                portfolio.find((p) => p.symbol === liveSelectedStock.symbol)
+                  ?.avg_price || 0
+              }
+              onTrade={() => handleOpenTrade(liveSelectedStock)}
+            />
+          </Suspense>
         </main>
         {tradeModalOpen && (
           <TradeModal
@@ -172,8 +190,8 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
             balance={balance}
             onConfirm={handleConfirmTrade}
             ownedQuantity={
-              portfolio.find((p) => p.symbol === selectedAsset?.symbol)?.amount ||
-              0
+              portfolio.find((p) => p.symbol === selectedAsset?.symbol)
+                ?.amount || 0
             }
             transactions={transactions.filter(
               (t) => t.symbol === selectedAsset?.symbol,
@@ -246,7 +264,11 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
               >
                 <div className="flex items-center gap-3 mb-2">
                   <div className="w-8 h-8 rounded-full bg-surfaceElevated border border-border flex items-center justify-center overflow-hidden">
-                    <img src={COMPANY_LOGOS[item.symbol] || ""} alt={item.name} className="w-full h-full object-cover" />
+                    <img
+                      src={COMPANY_LOGOS[item.symbol] || ""}
+                      alt={item.name}
+                      className="w-full h-full object-cover"
+                    />
                   </div>
                   <div>
                     <div className="font-semibold text-textMain">
@@ -360,7 +382,11 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
                         onClick={() => setSelectedStock(item)}
                       >
                         <div className="w-10 h-10 rounded-full bg-surfaceElevated border border-border flex items-center justify-center overflow-hidden transition-transform group-hover:scale-110">
-                          <img src={COMPANY_LOGOS[item.symbol] || ""} alt={item.name} className="w-full h-full object-cover" />
+                          <img
+                            src={COMPANY_LOGOS[item.symbol] || ""}
+                            alt={item.name}
+                            className="w-full h-full object-cover"
+                          />
                         </div>
                         <div>
                           <div className="font-semibold text-textMain">
@@ -542,7 +568,11 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
                         <td className="py-4 pl-2">
                           <div className="flex items-center gap-3">
                             <div className="w-8 h-8 rounded-full bg-surfaceElevated border border-border flex items-center justify-center overflow-hidden">
-                              <img src={COMPANY_LOGOS[item.symbol] || ""} alt={item.symbol} className="w-full h-full object-cover" />
+                              <img
+                                src={COMPANY_LOGOS[item.symbol] || ""}
+                                alt={item.symbol}
+                                className="w-full h-full object-cover"
+                              />
                             </div>
                             <div>
                               <div className="font-semibold text-textMain">

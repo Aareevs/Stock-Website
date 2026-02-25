@@ -1,17 +1,39 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, Suspense, lazy } from "react";
 import { DashboardLayout } from "./components/dashboard/DashboardLayout";
 import { UserLogin } from "./components/auth/UserLogin";
 import { AdminLogin } from "./components/admin/AdminLogin";
-import { AdminDashboard } from "./components/admin/AdminDashboard";
+
+// Lazy-load admin dashboard (heavy: Recharts + graphData + zoom logic)
+const AdminDashboard = lazy(() =>
+  import("./components/admin/AdminDashboard").then((m) => ({
+    default: m.AdminDashboard,
+  })),
+);
 import { useAuth } from "./components/auth/AuthProvider";
 import { useMarket } from "./hooks/useMarket";
 import { useNews } from "./hooks/useNews";
 import { usePortfolio } from "./hooks/usePortfolio";
 import { supabase } from "./lib/supabaseClient";
+import { getGraphPrice } from "./engine/graphPlaybackEngine";
 
 const STARTING_CAPITAL = 100000; // ₹1 Lakh
 
 type View = "dashboard" | "admin_login" | "admin_dashboard";
+
+const SYMBOLS = [
+  "VELOCITY",
+  "APEXAUTO",
+  "CRUISER",
+  "VITALIS",
+  "CAREPLUS",
+  "MEDISURG",
+  "EDUNEXT",
+  "SCHOLAR",
+  "BRAINB",
+  "FRESHC",
+  "SPICER",
+  "URBANB",
+];
 
 const App: React.FC = () => {
   const {
@@ -22,7 +44,14 @@ const App: React.FC = () => {
     isAdmin,
     refreshProfile,
   } = useAuth();
-  const { marketItems, setMarketItems, loading: marketLoading } = useMarket();
+  const {
+    marketItems,
+    setMarketItems,
+    loading: marketLoading,
+    setActiveNews,
+    resetTicks,
+    getTicks,
+  } = useMarket();
   const { newsEvents, loading: newsLoading, triggerNews, stopNews } = useNews();
   const {
     portfolio,
@@ -41,9 +70,13 @@ const App: React.FC = () => {
     setViewState(newView);
   };
 
+  // Keep useMarket in sync with active news events
+  useEffect(() => {
+    setActiveNews(newsEvents);
+  }, [newsEvents, setActiveNews]);
+
   // Show loading state
   if (authLoading || marketLoading) {
-    console.log("App loading:", { authLoading, marketLoading });
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center space-y-4">
@@ -107,54 +140,55 @@ const App: React.FC = () => {
           .eq("role", "participant");
         if (profileError) throw profileError;
 
-        // Clear all portfolios - use neq to match all rows
+        // Clear all portfolios
         const { error: portfolioError } = await supabase
           .from("portfolios")
           .delete()
           .neq("id", "00000000-0000-0000-0000-000000000000");
         if (portfolioError) throw portfolioError;
 
-        // Clear all transactions - use neq to match all rows
+        // Clear all transactions
         const { error: txError } = await supabase
           .from("transactions")
           .delete()
           .neq("id", "00000000-0000-0000-0000-000000000000");
         if (txError) throw txError;
 
-        // DELETE all news events - use neq to match all rows
+        // DELETE all news events
         const { error: newsError } = await supabase
           .from("news_events")
           .delete()
           .neq("id", "00000000-0000-0000-0000-000000000000");
         if (newsError) throw newsError;
 
-        // Reset market prices
-        const initialPrices: Record<string, number> = {
-          VELOCITY: 1250.0,
-          APEXAUTO: 850.0,
-          CRUISER: 2150.0,
-          VITALIS: 1650.0,
-          CAREPLUS: 3400.0,
-          MEDISURG: 920.0,
-          EDUNEXT: 540.0,
-          SCHOLAR: 890.0,
-          BRAINB: 1120.0,
-          FRESHC: 430.0,
-          SPICER: 1750.0,
-          URBANB: 220.0,
-        };
-
-        for (const [symbol, price] of Object.entries(initialPrices)) {
+        // Reset market prices to graph starting prices (tick 0)
+        for (const symbol of SYMBOLS) {
+          const startPrice = getGraphPrice(symbol, 0);
           await supabase
             .from("market_items")
             .update({
-              price,
+              price: startPrice,
               change: 0,
               sentiment: "Neutral",
               price_history: [],
             })
             .eq("symbol", symbol);
         }
+
+        // Reset tick counters to 0
+        resetTicks();
+
+        // Reset client-side market items to graph starting state
+        setMarketItems((prev) =>
+          prev.map((item) => ({
+            ...item,
+            price: getGraphPrice(item.symbol, 0),
+            change: 0,
+            sentiment: "Neutral" as const,
+            priceHistory: [],
+            price_history: [],
+          })),
+        );
 
         // Force page reload to refresh all data
         window.location.reload();
@@ -167,22 +201,33 @@ const App: React.FC = () => {
     };
 
     return (
-      <AdminDashboard
-        profile={profile}
-        marketItems={marketItems}
-        newsEvents={newsEvents}
-        onBack={() => {
-          signOut();
-          setView("dashboard");
-        }}
-        onTriggerNews={handleTriggerNews}
-        onStopNews={handleStopNews}
-        onResetAuction={handleResetAuction}
-      />
+      <Suspense
+        fallback={
+          <div className="min-h-screen bg-background flex items-center justify-center">
+            <div className="text-textMuted text-lg animate-pulse">
+              Loading Admin Dashboard...
+            </div>
+          </div>
+        }
+      >
+        <AdminDashboard
+          profile={profile}
+          marketItems={marketItems}
+          newsEvents={newsEvents}
+          onBack={() => {
+            signOut();
+            setView("dashboard");
+          }}
+          onTriggerNews={handleTriggerNews}
+          onStopNews={handleStopNews}
+          onResetAuction={handleResetAuction}
+          getTicks={getTicks}
+        />
+      </Suspense>
     );
   }
 
-  // Main dashboard
+  // Main dashboard — NO graphData passed here (security: Part 8)
   return (
     <DashboardLayout
       profile={profile}
