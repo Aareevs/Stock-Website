@@ -112,9 +112,11 @@ export const MiniChart: React.FC<MiniChartProps> = ({ data, color = '#1ED3A6' })
 
 interface SentimentChartProps {
   data: { name: string; value: number; color: string }[];
+  centerValue?: string;
+  centerLabel?: string;
 }
 
-export const SentimentChart: React.FC<SentimentChartProps> = ({ data }) => {
+export const SentimentChart: React.FC<SentimentChartProps> = ({ data, centerValue, centerLabel }) => {
   return (
     <div className="w-full h-[200px] relative">
       <ResponsiveContainer width="100%" height="100%">
@@ -134,8 +136,8 @@ export const SentimentChart: React.FC<SentimentChartProps> = ({ data }) => {
         </PieChart>
       </ResponsiveContainer>
       <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-        <span className="text-3xl font-bold text-textMain">53%</span>
-        <span className="text-xs text-textMuted uppercase tracking-wider">Bullish</span>
+        <span className="text-3xl font-bold text-textMain">{centerValue || '--'}</span>
+        <span className="text-xs text-textMuted uppercase tracking-wider">{centerLabel || 'Unknown'}</span>
       </div>
     </div>
   );

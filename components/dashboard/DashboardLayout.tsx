@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, Suspense, lazy } from "react";
 import { Sidebar } from "./Sidebar";
 import { Card } from "../ui/Card";
 import { MainChart, MiniSparkline, SentimentChart } from "./Charts";
@@ -21,10 +21,15 @@ import {
 } from "lucide-react";
 import { Button } from "../ui/Button";
 import { TradeModal } from "./TradeModal";
-import { StockDetailChart } from "./StockDetailChart";
+
+// Lazy-load stock detail chart (contains Recharts)
+const StockDetailChart = lazy(() =>
+  import("./StockDetailChart").then((m) => ({ default: m.StockDetailChart })),
+);
 import type { Profile } from "../auth/AuthProvider";
 import type { MarketItem } from "../../hooks/useMarket";
 import type { NewsEvent } from "../../hooks/useNews";
+import type { SimState } from "../../hooks/useMarket";
 import type { PortfolioItem, Transaction } from "../../hooks/usePortfolio";
 
 // Map company symbols to their logo filenames in /public
@@ -63,6 +68,8 @@ interface DashboardLayoutProps {
   onOpenAdmin: () => void;
   isAdmin: boolean;
   onRefreshProfile: () => Promise<void>;
+  elapsedSeconds: number;
+  simState: SimState;
 }
 
 export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
@@ -76,6 +83,8 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
   onOpenAdmin,
   isAdmin,
   onRefreshProfile,
+  elapsedSeconds,
+  simState,
 }) => {
   const [activeTab, setActiveTab] = useState("Overview");
   const [tradeModalOpen, setTradeModalOpen] = useState(false);
@@ -86,13 +95,48 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
   // Track previous news event count to detect new flashes
   const prevNewsCountRef = useRef(newsEvents.length);
 
+  // Compute live market sentiment globally for this component
+  const sentimentCounts = { bullish: 0, bearish: 0, neutral: 0 };
+  marketItems.forEach(item => {
+    if (item.change > 0) sentimentCounts.bullish++;
+    else if (item.change < 0) sentimentCounts.bearish++;
+    else sentimentCounts.neutral++;
+  });
+  
+  const totalItems = marketItems.length || 1; // Prevent division by zero
+  const liveSentimentData = [
+    { name: 'Bullish', value: Math.round((sentimentCounts.bullish / totalItems) * 100), color: '#1ED3A6' },
+    { name: 'Neutral', value: Math.round((sentimentCounts.neutral / totalItems) * 100), color: '#8FA6A0' },
+    { name: 'Bearish', value: Math.round((sentimentCounts.bearish / totalItems) * 100), color: '#EF4444' },
+  ];
+
+  // Find the dominant sentiment
+  const topSentiment = [...liveSentimentData].sort((a, b) => b.value - a.value)[0];
+
+  // Global total portfolio value
+  const totalPortfolioValueGlobal = portfolio.reduce((acc, item) => {
+    const currentPrice = marketItems.find((m) => m.symbol === item.symbol)?.price ?? 0;
+    return acc + (item.amount ?? 0) * currentPrice;
+  }, 0);
+
+  // Find highest allocation
+  let topAllocation = null;
+  if (portfolio.length > 0 && totalPortfolioValueGlobal > 0) {
+    const allocations = portfolio.map(item => {
+      const currentPrice = marketItems.find((m) => m.symbol === item.symbol)?.price ?? 0;
+      const val = (item.amount ?? 0) * currentPrice;
+      return { name: item.symbol, value: Math.round((val / totalPortfolioValueGlobal) * 100) };
+    });
+    topAllocation = allocations.sort((a, b) => b.value - a.value)[0];
+  }
+
   useEffect(() => {
     if (newsEvents.length > prevNewsCountRef.current) {
       // A new flash was triggered — show toast
       const newest = newsEvents[0];
       if (newest && newest.active) {
         setNewsToast(newest);
-        const timer = setTimeout(() => setNewsToast(null), 8000);
+        const timer = setTimeout(() => setNewsToast(null), 5000);
         return () => clearTimeout(timer);
       }
     }
@@ -136,8 +180,14 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
     return acc + (item.amount ?? 0) * currentPrice;
   }, 0);
 
-  // If viewing a stock detail chart
-  if (selectedStock) {
+  // If viewing a stock detail chart, look up the LIVE version from marketItems
+  // so it updates in real-time (instead of using the stale snapshot)
+  const liveSelectedStock = selectedStock
+    ? (marketItems.find((m) => m.symbol === selectedStock.symbol) ??
+      selectedStock)
+    : null;
+
+  if (liveSelectedStock) {
     return (
       <div className="flex min-h-screen bg-background text-textMain">
         <Sidebar
@@ -150,19 +200,27 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
           currentUserName={profile.display_name}
         />
         <main className="flex-1 p-4 md:p-8 overflow-y-auto max-h-screen">
-          <StockDetailChart
-            stock={selectedStock}
-            onBack={() => setSelectedStock(null)}
-            ownedQty={
-              portfolio.find((p) => p.symbol === selectedStock.symbol)
-                ?.amount || 0
+          <Suspense
+            fallback={
+              <div className="text-textMuted text-center py-10 animate-pulse">
+                Loading chart...
+              </div>
             }
-            avgPrice={
-              portfolio.find((p) => p.symbol === selectedStock.symbol)
-                ?.avg_price || 0
-            }
-            onTrade={() => handleOpenTrade(selectedStock)}
-          />
+          >
+            <StockDetailChart
+              stock={liveSelectedStock}
+              onBack={() => setSelectedStock(null)}
+              ownedQty={
+                portfolio.find((p) => p.symbol === liveSelectedStock.symbol)
+                  ?.amount || 0
+              }
+              avgPrice={
+                portfolio.find((p) => p.symbol === liveSelectedStock.symbol)
+                  ?.avg_price || 0
+              }
+              onTrade={() => handleOpenTrade(liveSelectedStock)}
+            />
+          </Suspense>
         </main>
         {tradeModalOpen && (
           <TradeModal
@@ -172,8 +230,8 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
             balance={balance}
             onConfirm={handleConfirmTrade}
             ownedQuantity={
-              portfolio.find((p) => p.symbol === selectedAsset?.symbol)?.amount ||
-              0
+              portfolio.find((p) => p.symbol === selectedAsset?.symbol)
+                ?.amount || 0
             }
             transactions={transactions.filter(
               (t) => t.symbol === selectedAsset?.symbol,
@@ -246,7 +304,11 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
               >
                 <div className="flex items-center gap-3 mb-2">
                   <div className="w-8 h-8 rounded-full bg-surfaceElevated border border-border flex items-center justify-center overflow-hidden">
-                    <img src={COMPANY_LOGOS[item.symbol] || ""} alt={item.name} className="w-full h-full object-cover" />
+                    <img
+                      src={COMPANY_LOGOS[item.symbol] || ""}
+                      alt={item.name}
+                      className="w-full h-full object-cover"
+                    />
                   </div>
                   <div>
                     <div className="font-semibold text-textMain">
@@ -309,7 +371,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
             Live
           </div>
           <div className="text-primary text-sm flex items-center gap-1">
-            Prices update every 5s
+            Prices update real-time
           </div>
         </Card>
         <Card className="bg-gradient-to-br from-surface to-surfaceElevated">
@@ -360,7 +422,11 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
                         onClick={() => setSelectedStock(item)}
                       >
                         <div className="w-10 h-10 rounded-full bg-surfaceElevated border border-border flex items-center justify-center overflow-hidden transition-transform group-hover:scale-110">
-                          <img src={COMPANY_LOGOS[item.symbol] || ""} alt={item.name} className="w-full h-full object-cover" />
+                          <img
+                            src={COMPANY_LOGOS[item.symbol] || ""}
+                            alt={item.name}
+                            className="w-full h-full object-cover"
+                          />
                         </div>
                         <div>
                           <div className="font-semibold text-textMain">
@@ -475,23 +541,25 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
             <h3 className="text-sm font-semibold mb-2">Allocation</h3>
             <div className="h-[200px]">
               {portfolio.length > 0 ? (
-                <SentimentChart
-                  data={portfolio.map((i, idx) => ({
-                    name: i.symbol,
-                    value:
-                      (i.amount ?? 0) *
-                      (marketItems.find((m) => m.symbol === i.symbol)?.price ??
-                        0),
-                    color: [
-                      "#1ED3A6",
-                      "#14B8A6",
-                      "#0D9488",
-                      "#0F766E",
-                      "#10B981",
-                      "#34D399",
-                    ][idx % 6],
-                  }))}
-                />
+              <SentimentChart
+                data={portfolio.map((i, idx) => ({
+                  name: i.symbol,
+                  value:
+                    (i.amount ?? 0) *
+                    (marketItems.find((m) => m.symbol === i.symbol)?.price ??
+                      0),
+                  color: [
+                    "#1ED3A6",
+                    "#14B8A6",
+                    "#0D9488",
+                    "#0F766E",
+                    "#10B981",
+                    "#34D399",
+                  ][idx % 6],
+                }))}
+                centerValue={topAllocation ? `${topAllocation.value}%` : '--'}
+                centerLabel={topAllocation ? topAllocation.name : 'Unknown'}
+              />
               ) : (
                 <div className="h-full flex items-center justify-center text-textMuted text-xs">
                   No assets owned
@@ -542,7 +610,11 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
                         <td className="py-4 pl-2">
                           <div className="flex items-center gap-3">
                             <div className="w-8 h-8 rounded-full bg-surfaceElevated border border-border flex items-center justify-center overflow-hidden">
-                              <img src={COMPANY_LOGOS[item.symbol] || ""} alt={item.symbol} className="w-full h-full object-cover" />
+                              <img
+                                src={COMPANY_LOGOS[item.symbol] || ""}
+                                alt={item.symbol}
+                                className="w-full h-full object-cover"
+                              />
                             </div>
                             <div>
                               <div className="font-semibold text-textMain">
@@ -693,78 +765,97 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
           </div>
         </div>
 
-        {/* Active Flash — Featured Blog Post */}
+        {/* Active Flash — Featured Premium UI */}
         {activeEvent &&
           (() => {
             const crashCompany = marketItems.find(
               (m) => m.symbol === activeEvent.crash_company,
             );
             return (
-              <div className="relative overflow-hidden rounded-2xl border border-orange-500/30 bg-gradient-to-br from-orange-500/5 via-surface to-red-500/5">
-                <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-orange-500 via-red-500 to-orange-500" />
-                <div className="p-6 md:p-8">
-                  <div className="flex items-center gap-3 mb-4">
-                    <span className="flex items-center gap-1.5 px-2.5 py-1 bg-red-500 text-white rounded-full text-[10px] font-bold uppercase tracking-wider">
-                      <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
-                      Live
-                    </span>
-                    <span className="flex items-center gap-1 text-xs text-textMuted">
-                      <Clock className="w-3 h-3" />
-                      {new Date(activeEvent.created_at).toLocaleString(
-                        "en-IN",
-                        {
+              <div className="relative overflow-hidden rounded-3xl border border-red-500/40 shadow-[0_0_50px_rgba(239,68,68,0.15)] bg-gradient-to-br from-red-950/40 via-surface to-red-900/20 backdrop-blur-xl">
+                {/* Glowing top accent line */}
+                <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-red-600 via-orange-500 to-red-600 shadow-[0_0_20px_rgba(239,68,68,0.8)] animate-pulse" />
+                
+                {/* Background ambient glow effect */}
+                <div className="absolute -top-32 -right-32 w-96 h-96 bg-red-600/10 rounded-full blur-[100px] pointer-events-none" />
+                <div className="absolute -bottom-32 -left-32 w-96 h-96 bg-orange-600/10 rounded-full blur-[100px] pointer-events-none" />
+
+                <div className="relative z-10 p-6 md:p-10">
+                  {/* Header row */}
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+                    <div className="flex items-center gap-3">
+                      <span className="flex items-center gap-2 px-4 py-1.5 bg-red-600/20 text-red-400 border border-red-500/30 rounded-full text-xs font-black uppercase tracking-[0.2em] shadow-[0_0_15px_rgba(239,68,68,0.4)]">
+                        <span className="w-2 h-2 rounded-full bg-red-500 animate-[ping_1.5s_ease-in-out_infinite]" />
+                        <span className="w-2 h-2 rounded-full bg-red-500 absolute" />
+                        Live Alert
+                      </span>
+                      <span className="flex items-center gap-1.5 text-sm font-medium text-textMuted uppercase tracking-wider">
+                        <Clock className="w-4 h-4" />
+                        {new Date(activeEvent.created_at).toLocaleString("en-IN", {
                           hour: "2-digit",
                           minute: "2-digit",
                           day: "numeric",
                           month: "short",
-                        },
-                      )}
-                    </span>
+                        })}
+                      </span>
+                    </div>
                   </div>
-                  <h2 className="text-xl md:text-2xl font-bold text-orange-400 mb-3 leading-tight">
+
+                  {/* Headline */}
+                  <h2 className="text-3xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white via-red-100 to-red-300 mb-6 leading-tight tracking-tight drop-shadow-md">
                     {activeEvent.headline}
                   </h2>
-                  <p className="text-sm text-textMuted mb-5 leading-relaxed max-w-2xl">
-                    Markets are reacting to breaking developments.{" "}
-                    {crashCompany?.name || activeEvent.crash_company} shares
-                    have plummeted by {Math.abs(activeEvent.crash_percent)}% as
-                    investors rush to exit positions.
+                  
+                  {/* Context paragraph */}
+                  <p className="text-base md:text-lg text-textMuted/90 mb-10 leading-relaxed max-w-3xl border-l-2 border-red-500/30 pl-4">
+                    Markets are reacting instantly to breaking developments. <strong className="text-red-400 font-bold">{crashCompany?.name || activeEvent.crash_company}</strong> shares
+                    have plummeted by <strong className="text-red-400 font-bold">{Math.abs(activeEvent.crash_percent)}%</strong> as investors rush to exit positions.
                     {activeEvent.boost_companies.length > 0 &&
-                      ` Meanwhile, competitors are seeing gains as capital flows into alternative stocks.`}
+                      ` Meanwhile, sector rivals are seeing aggressive gains as capital rotates into alternative safe havens.`}
                   </p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div className="flex items-center gap-3 p-3 bg-negative/5 rounded-xl border border-negative/20">
-                      <div className="w-10 h-10 rounded-lg bg-negative/10 flex items-center justify-center">
-                        <TrendingDown className="w-5 h-5 text-negative" />
+
+                  {/* Impact Cards Grid */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {/* Crashing Card */}
+                    <div className="relative group overflow-hidden bg-gradient-to-b from-red-950/60 to-surface border border-red-500/30 rounded-2xl p-5 hover:border-red-500/60 transition-all duration-300">
+                      <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                        <TrendingDown className="w-24 h-24 text-red-500 -rotate-12" />
                       </div>
-                      <div>
-                        <div className="text-xs text-textMuted">Crashing</div>
-                        <div className="font-bold text-negative">
+                      <div className="relative z-10">
+                        <div className="flex items-center gap-2 mb-4">
+                          <div className="w-8 h-8 rounded-lg bg-red-500/20 flex items-center justify-center">
+                            <TrendingDown className="w-4 h-4 text-red-500" />
+                          </div>
+                          <span className="text-xs font-bold text-red-400 uppercase tracking-widest">Crashing</span>
+                        </div>
+                        <div className="text-2xl font-black text-white mb-1 truncate">
                           {crashCompany?.name || activeEvent.crash_company}
                         </div>
-                        <div className="text-xs font-mono text-negative">
+                        <div className="text-4xl font-black text-red-500 drop-shadow-[0_0_10px_rgba(239,68,68,0.5)]">
                           {activeEvent.crash_percent}%
                         </div>
                       </div>
                     </div>
+
+                    {/* Benefiting Cards */}
                     {activeEvent.boost_companies.map((sym) => {
                       const company = marketItems.find((m) => m.symbol === sym);
                       return (
-                        <div
-                          key={sym}
-                          className="flex items-center gap-3 p-3 bg-primary/5 rounded-xl border border-primary/20"
-                        >
-                          <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                            <TrendingUp className="w-5 h-5 text-primary" />
+                        <div key={sym} className="relative group overflow-hidden bg-gradient-to-b from-emerald-950/40 to-surface border border-emerald-500/30 rounded-2xl p-5 hover:border-emerald-500/60 transition-all duration-300">
+                          <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                            <TrendingUp className="w-24 h-24 text-emerald-500 rotat-12" />
                           </div>
-                          <div>
-                            <div className="text-xs text-textMuted">
-                              Benefiting
+                          <div className="relative z-10">
+                            <div className="flex items-center gap-2 mb-4">
+                              <div className="w-8 h-8 rounded-lg bg-emerald-500/20 flex items-center justify-center">
+                                <TrendingUp className="w-4 h-4 text-emerald-400" />
+                              </div>
+                              <span className="text-xs font-bold text-emerald-400 uppercase tracking-widest">Benefiting</span>
                             </div>
-                            <div className="font-bold text-primary">
+                            <div className="text-xl font-bold text-white mb-1 truncate">
                               {company?.name || sym}
                             </div>
-                            <div className="text-xs font-mono text-primary">
+                            <div className="text-3xl font-black text-emerald-400 drop-shadow-[0_0_10px_rgba(52,211,153,0.3)]">
                               +{activeEvent.boost_percent}%
                             </div>
                           </div>
@@ -878,6 +969,8 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
         setActiveTab={setActiveTab}
         onOpenAdmin={onOpenAdmin}
         currentUserName={profile.display_name}
+        simState={simState}
+        elapsedSeconds={elapsedSeconds}
       />
 
       {tradeModalOpen && (
@@ -1001,7 +1094,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
           </div>
         </header>
 
-        {/* Breaking News Banner — visible on all tabs when a flash is active */}
+        {/* Breaking News Banner — Premium UI (visible on all tabs when a flash is active) */}
         {(() => {
           const activeEvent = newsEvents.find((e) => e.active);
           if (!activeEvent) return null;
@@ -1009,35 +1102,43 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
             (m) => m.symbol === activeEvent.crash_company,
           );
           return (
-            <div className="mb-6 relative overflow-hidden rounded-xl border border-orange-500/30 bg-gradient-to-r from-orange-500/10 via-red-500/5 to-orange-500/10">
-              <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-orange-500 via-red-500 to-orange-500 animate-pulse" />
-              <div className="p-4">
-                <div className="flex items-center gap-3 mb-2">
-                  <span className="flex items-center gap-1.5 px-2 py-0.5 bg-red-500 text-white rounded text-[10px] font-bold uppercase tracking-wider">
-                    <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
-                    Live
-                  </span>
-                  <span className="text-xs text-textMuted">Breaking News</span>
+            <div className="mb-6 relative overflow-hidden rounded-2xl border border-red-500/50 shadow-[0_0_30px_rgba(239,68,68,0.15)] bg-gradient-to-r from-red-950/60 via-surface to-red-900/30 backdrop-blur-md cursor-pointer hover:border-red-400/80 transition-all duration-300" onClick={() => setActiveTab("News Events")}>
+              <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-red-600 via-orange-500 to-red-600 shadow-[0_0_15px_rgba(239,68,68,0.8)] animate-pulse" />
+              
+              <div className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 relative z-10">
+                <div className="flex-1">
+                  <div className="flex items-center gap-3 mb-2">
+                    <span className="flex items-center gap-1.5 px-3 py-1 bg-red-600/20 text-red-400 border border-red-500/30 rounded-full text-[10px] font-black uppercase tracking-widest shadow-[0_0_10px_rgba(239,68,68,0.3)]">
+                      <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-[ping_1.5s_ease-in-out_infinite]" />
+                      <span className="w-1.5 h-1.5 rounded-full bg-red-500 absolute" />
+                      Breaking News
+                    </span>
+                    <span className="text-xs font-semibold text-textMuted/80 uppercase tracking-widest">Market Alert</span>
+                  </div>
+                  <h3 className="text-lg md:text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white to-red-200">
+                    {activeEvent.headline}
+                  </h3>
                 </div>
-                <h3 className="text-sm md:text-base font-bold text-orange-400 mb-2">
-                  {activeEvent.headline}
-                </h3>
-                <div className="flex flex-wrap gap-2">
-                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-negative/10 text-negative rounded-lg text-xs font-semibold">
-                    <TrendingDown className="w-3 h-3" />
-                    {crashCompany?.name || activeEvent.crash_company}{" "}
-                    {activeEvent.crash_percent}%
-                  </span>
-                  {activeEvent.boost_companies.map((sym) => {
+
+                <div className="flex flex-wrap items-center gap-3 md:pl-6 md:border-l border-red-500/20">
+                  <div className="flex items-center gap-2 px-3 py-2 bg-red-950/40 rounded-xl border border-red-500/20">
+                    <TrendingDown className="w-5 h-5 text-red-500" />
+                    <div>
+                      <div className="text-[10px] text-red-400/80 uppercase tracking-wider font-bold">Crashing</div>
+                      <div className="text-sm font-black text-red-500 leading-none">{crashCompany?.name || activeEvent.crash_company} {activeEvent.crash_percent}%</div>
+                    </div>
+                  </div>
+                  
+                  {activeEvent.boost_companies.slice(0, 2).map((sym) => {
                     const company = marketItems.find((m) => m.symbol === sym);
                     return (
-                      <span
-                        key={sym}
-                        className="inline-flex items-center gap-1 px-2 py-1 bg-primary/10 text-primary rounded-lg text-xs font-semibold"
-                      >
-                        <TrendingUp className="w-3 h-3" />
-                        {company?.name || sym} +{activeEvent.boost_percent}%
-                      </span>
+                      <div key={sym} className="flex items-center gap-2 px-3 py-2 bg-emerald-950/40 rounded-xl border border-emerald-500/20">
+                        <TrendingUp className="w-5 h-5 text-emerald-400" />
+                        <div>
+                          <div className="text-[10px] text-emerald-400/80 uppercase tracking-wider font-bold">Boosting</div>
+                          <div className="text-sm font-black text-emerald-400 leading-none">{company?.name || sym} +{activeEvent.boost_percent}%</div>
+                        </div>
+                      </div>
                     );
                   })}
                 </div>
@@ -1052,10 +1153,14 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
             <div className="space-y-6">
               {/* Sentiment Gauge */}
               <Card>
-                <h3 className="text-sm font-semibold mb-2">Market Sentiment</h3>
-                <SentimentChart data={SENTIMENT_DATA} />
+                <h3 className="text-sm font-semibold mb-4">Market Sentiment</h3>
+                <SentimentChart 
+                  data={liveSentimentData} 
+                  centerValue={topSentiment ? `${topSentiment.value}%` : '--%'}
+                  centerLabel={topSentiment ? topSentiment.name : 'Unknown'}
+                />
                 <div className="grid grid-cols-3 gap-2 mt-4 text-center">
-                  {SENTIMENT_DATA.map((item) => (
+                  {liveSentimentData.map((item) => (
                     <div key={item.name}>
                       <div
                         className="text-xs font-bold"
