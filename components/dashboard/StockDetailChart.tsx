@@ -44,7 +44,7 @@ export const StockDetailChart: React.FC<StockDetailChartProps> = ({
   avgPrice,
   onTrade,
 }) => {
-  const [timeframe, setTimeframe] = useState<Timeframe>("overall");
+  const [timeframe, setTimeframe] = useState<Timeframe>("5m");
 
   const isPositive = (stock.change ?? 0) >= 0;
   const currentValue = ownedQty * (stock.price ?? 0);
@@ -110,22 +110,7 @@ export const StockDetailChart: React.FC<StockDetailChartProps> = ({
         </div>
       </div>
 
-      {/* Timeframe Controls */}
-      <div className="flex gap-2">
-        {(["1m", "5m", "10m", "30m", "overall"] as Timeframe[]).map((tf) => (
-          <button
-            key={tf}
-            onClick={() => setTimeframe(tf)}
-            className={`px-3 py-1.5 rounded text-xs font-semibold transition-all ${
-              timeframe === tf
-                ? "bg-primary text-white shadow-sm shadow-primary/30"
-                : "bg-surface border border-border text-textMuted hover:text-textMain hover:border-primary/30"
-            }`}
-          >
-            {tf === "overall" ? "Overall" : tf.toUpperCase()}
-          </button>
-        ))}
-      </div>
+      {/* Timeframe Controls (Removed - Locked to 5M) */}
 
       {/* Chart */}
       <Card padding="sm">

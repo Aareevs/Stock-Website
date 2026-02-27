@@ -8,11 +8,15 @@ import {
   Search,
 } from "lucide-react";
 
+import type { SimState } from "../../hooks/useMarket";
+
 interface SidebarProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
   onOpenAdmin: () => void;
   currentUserName?: string;
+  simState: SimState;
+  elapsedSeconds: number;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -20,6 +24,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   setActiveTab,
   onOpenAdmin,
   currentUserName,
+  simState,
+  elapsedSeconds,
 }) => {
   const navItems = [
     { icon: LayoutDashboard, label: "Overview" },
@@ -74,6 +80,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <span className="text-sm font-semibold text-textMain truncate block">
               {currentUserName}
             </span>
+          </div>
+        )}
+
+        {/* Event Timer in Sidebar */}
+        {simState !== 'idle' && (
+          <div className="mx-3 my-4 px-3 py-3 rounded-lg border border-amber-500/30 bg-amber-500/5" style={{ animation: simState === 'running' ? 'pulse 2s infinite' : 'none' }}>
+            <span className="text-[10px] text-amber-500/80 block mb-1 font-bold tracking-widest uppercase text-center hidden lg:block">
+              Event Timer
+            </span>
+            <div className="font-mono font-bold text-amber-400 text-center text-sm lg:text-lg tracking-wider">
+              {String(Math.floor(elapsedSeconds / 3600)).padStart(2, '0')}:{String(Math.floor((elapsedSeconds % 3600) / 60)).padStart(2, '0')}:{String(elapsedSeconds % 60).padStart(2, '0')}
+            </div>
           </div>
         )}
       </div>
