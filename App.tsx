@@ -1,4 +1,4 @@
-import React, { useState, useEffect, Suspense, lazy } from "react";
+import React, { useState, useEffect, useRef, Suspense, lazy } from "react";
 import { DashboardLayout } from "./components/dashboard/DashboardLayout";
 import { UserLogin } from "./components/auth/UserLogin";
 import { AdminLogin } from "./components/admin/AdminLogin";
@@ -15,6 +15,7 @@ import { useNews } from "./hooks/useNews";
 import { usePortfolio } from "./hooks/usePortfolio";
 import { supabase } from "./lib/supabaseClient";
 import { getGraphPrice } from "./engine/graphPlaybackEngine";
+import { SCHEDULED_NEWS } from "./data/scheduledNews";
 
 const STARTING_CAPITAL = 100000; // ₹1 Lakh
 
@@ -51,6 +52,12 @@ const App: React.FC = () => {
     setActiveNews,
     resetTicks,
     getTicks,
+    simState,
+    elapsedSeconds,
+    startSimulation,
+    pauseSimulation,
+    resetSimulation,
+    skipToTick,
   } = useMarket();
   const { newsEvents, loading: newsLoading, triggerNews, stopNews } = useNews();
   const {
@@ -74,6 +81,96 @@ const App: React.FC = () => {
   useEffect(() => {
     setActiveNews(newsEvents);
   }, [newsEvents, setActiveNews]);
+
+  // --- Auto-trigger scheduled news flashes ---
+  const triggeredRef = useRef<Set<number>>(new Set());
+  const stoppedRef = useRef<Set<number>>(new Set());
+  // Track news event IDs returned from triggering so we can auto-stop them
+  const scheduledEventIdsRef = useRef<Map<number, string>>(new Map());
+
+  // Stable refs for values used in the auto-trigger effect
+  // This avoids putting unstable function refs (triggerNews, stopNews) in the dep array
+  const triggerNewsRef = useRef(triggerNews);
+  triggerNewsRef.current = triggerNews;
+  const stopNewsRef = useRef(stopNews);
+  stopNewsRef.current = stopNews;
+  const marketItemsRef = useRef(marketItems);
+  marketItemsRef.current = marketItems;
+  const newsEventsRef = useRef(newsEvents);
+  newsEventsRef.current = newsEvents;
+
+  // Reset tracking when simulation resets to idle
+  useEffect(() => {
+    if (simState === 'idle') {
+      triggeredRef.current = new Set();
+      stoppedRef.current = new Set();
+      scheduledEventIdsRef.current = new Map();
+    }
+  }, [simState]);
+
+  // Auto-trigger and auto-stop scheduled events
+  // Only depends on elapsedSeconds and simState — uses refs for everything else
+  useEffect(() => {
+    if (simState !== 'running' || !user) return;
+
+    for (const scheduled of SCHEDULED_NEWS) {
+      const endTick = scheduled.triggerTick + scheduled.durationTicks;
+
+      // ─── Case 1: Event is fully in the past (skipped past it) ───
+      // Mark as done without actually firing — it's already over
+      if (
+        elapsedSeconds >= endTick &&
+        !triggeredRef.current.has(scheduled.triggerTick)
+      ) {
+        triggeredRef.current.add(scheduled.triggerTick);
+        stoppedRef.current.add(scheduled.triggerTick);
+        continue; // Skip — don't fire a past event
+      }
+
+      // ─── Case 2: Currently inside the event's active window ───
+      // Trigger if not already triggered
+      if (
+        elapsedSeconds >= scheduled.triggerTick &&
+        elapsedSeconds < endTick &&
+        !triggeredRef.current.has(scheduled.triggerTick)
+      ) {
+        triggeredRef.current.add(scheduled.triggerTick);
+        triggerNewsRef.current(
+          scheduled.headline,
+          scheduled.crashCompany,
+          scheduled.crashPercent,
+          scheduled.boostCompanies,
+          scheduled.boostPercent,
+          marketItemsRef.current,
+          user.id,
+        ).then((result) => {
+          if (result.event) {
+            scheduledEventIdsRef.current.set(scheduled.triggerTick, result.event.id);
+          }
+        }).catch((err) => {
+          console.error('[AutoNews] Failed to trigger scheduled event:', err);
+        });
+      }
+
+      // ─── Case 3: Auto-stop when duration expires ───
+      if (
+        elapsedSeconds >= endTick &&
+        triggeredRef.current.has(scheduled.triggerTick) &&
+        !stoppedRef.current.has(scheduled.triggerTick)
+      ) {
+        stoppedRef.current.add(scheduled.triggerTick);
+        const eventId = scheduledEventIdsRef.current.get(scheduled.triggerTick);
+        if (eventId) {
+          const event = newsEventsRef.current.find(e => e.id === eventId);
+          if (event && event.active) {
+            stopNewsRef.current(eventId, event, marketItemsRef.current).catch((err) => {
+              console.error('[AutoNews] Failed to stop scheduled event:', err);
+            });
+          }
+        }
+      }
+    }
+  }, [elapsedSeconds, simState, user]);
 
   // Show loading state
   if (authLoading || marketLoading) {
@@ -222,6 +319,12 @@ const App: React.FC = () => {
           onStopNews={handleStopNews}
           onResetAuction={handleResetAuction}
           getTicks={getTicks}
+          simState={simState}
+          elapsedSeconds={elapsedSeconds}
+          onStartSim={startSimulation}
+          onPauseSim={pauseSimulation}
+          onResetSim={resetSimulation}
+          onSkipTo={skipToTick}
         />
       </Suspense>
     );
@@ -243,6 +346,8 @@ const App: React.FC = () => {
       onOpenAdmin={() => setView(isAdmin ? "admin_dashboard" : "admin_login")}
       isAdmin={isAdmin}
       onRefreshProfile={refreshProfile}
+      elapsedSeconds={elapsedSeconds}
+      simState={simState}
     />
   );
 };

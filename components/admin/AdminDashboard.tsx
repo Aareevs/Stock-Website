@@ -14,6 +14,12 @@ import {
   ChevronDown,
   Check,
   RefreshCw,
+  Play,
+  Pause,
+  Square,
+  Timer,
+  Clock,
+  SkipForward,
 } from "lucide-react";
 import { Card } from "../ui/Card";
 import { Button } from "../ui/Button";
@@ -22,8 +28,10 @@ import { AdminUsers } from "./AdminUsers";
 import { graphData } from "../../data/graphData";
 import type { StockDataPoint } from "../../types";
 import type { Profile } from "../auth/AuthProvider";
-import type { MarketItem } from "../../hooks/useMarket";
+import type { MarketItem, SimState } from "../../hooks/useMarket";
 import type { NewsEvent } from "../../hooks/useNews";
+import { SCHEDULED_NEWS } from "../../data/scheduledNews";
+import { supabase } from "../../lib/supabaseClient";
 
 interface AdminDashboardProps {
   profile: Profile;
@@ -40,6 +48,22 @@ interface AdminDashboardProps {
   onStopNews: (eventId: string) => Promise<{ error: string | null }>;
   onResetAuction: () => Promise<{ error: string | null }>;
   getTicks: () => Record<string, number>;
+  simState: SimState;
+  elapsedSeconds: number;
+  onStartSim: () => void;
+  onPauseSim: () => void;
+  onResetSim: () => void;
+  onSkipTo: (tick: number) => void;
+}
+
+const TOTAL_EVENT_SECONDS = 7200; // 2 hours
+
+/** Format seconds as HH:MM:SS */
+function formatTime(totalSeconds: number): string {
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = totalSeconds % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
 /**
@@ -65,14 +89,88 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onStopNews,
   onResetAuction,
   getTicks,
+  simState,
+  elapsedSeconds,
+  onStartSim,
+  onPauseSim,
+  onResetSim,
+  onSkipTo,
 }) => {
   const [activeView, setActiveView] = useState<"charts" | "news" | "users">(
     "news",
   );
+  
+  // Top Participant fetching
+  const [topParticipant, setTopParticipant] = useState<{name: string, netWorth: number} | null>(null);
+  const priceMapRef = useRef<Record<string, number>>({});
+  
+  useEffect(() => {
+    const m: Record<string, number> = {};
+    marketItems.forEach(item => { m[item.symbol] = item.price; });
+    priceMapRef.current = m;
+  }, [marketItems]);
+
+  useEffect(() => {
+    let mounted = true;
+    const fetchTopParticipant = async () => {
+      try {
+        const { data: profiles, error: pErr } = await supabase
+          .from('profiles')
+          .select('id, display_name, cash_balance')
+          .eq('role', 'participant');
+        if (pErr) return;
+
+        const { data: portfolios, error: portErr } = await supabase
+          .from('portfolios')
+          .select('user_id, symbol, amount, avg_price');
+        if (portErr) return;
+
+        const portfolioByUser: Record<string, any[]> = {};
+        (portfolios || []).forEach((row: any) => {
+          if (!portfolioByUser[row.user_id]) portfolioByUser[row.user_id] = [];
+          portfolioByUser[row.user_id].push(row);
+        });
+
+        const pm = priceMapRef.current;
+        let topUser = null;
+        let maxNetWorth = -Infinity;
+
+        (profiles || []).forEach((p: any) => {
+          const holdings = portfolioByUser[p.id] || [];
+          const stockValue = holdings.reduce((sum, h) => {
+            return sum + h.amount * (pm[h.symbol] ?? h.avg_price);
+          }, 0);
+          const netWorth = stockValue + p.cash_balance;
+          
+          if (netWorth > maxNetWorth) {
+            maxNetWorth = netWorth;
+            topUser = { name: p.display_name, netWorth };
+          }
+        });
+
+        if (mounted && topUser) {
+          setTopParticipant(topUser);
+        }
+      } catch (e) {
+        // Silently fail
+      }
+    };
+
+    fetchTopParticipant();
+    const interval = setInterval(fetchTopParticipant, 5000); // refresh every 5s
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, []);
   const [selectedChart, setSelectedChart] = useState<MarketItem | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [isResetting, setIsResetting] = useState(false);
   const [resetConfirm, setResetConfirm] = useState(false);
+
+  // Sim reset confirm
+  const [simResetConfirm, setSimResetConfirm] = useState(false);
+  const [skipMinutes, setSkipMinutes] = useState('');
 
   // News event form state
   const [crashSymbol, setCrashSymbol] = useState("");
@@ -201,6 +299,252 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
         </div>
 
+        {/* ─── Simulation Control Bar ─── */}
+        <Card className="bg-gradient-to-r from-surface via-surfaceElevated to-surface mb-8 border-primary/20">
+          <div className="flex flex-col gap-4">
+            {/* Top row: status + timer + controls */}
+            <div className="flex items-center justify-between flex-wrap gap-4">
+              {/* Status badge + timer */}
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <Timer className="w-5 h-5 text-primary" />
+                  <span className="text-sm font-semibold text-textMuted uppercase tracking-wider">Event Timer</span>
+                </div>
+                <span
+                  className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
+                    simState === 'running'
+                      ? 'bg-primary/15 text-primary border border-primary/30 animate-pulse'
+                      : simState === 'paused'
+                        ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
+                        : 'bg-surface text-textMuted border border-border'
+                  }`}
+                >
+                  {simState === 'running' ? '● Live' : simState === 'paused' ? '⏸ Paused' : '○ Idle'}
+                </span>
+              </div>
+
+              {/* Timer display */}
+              <div className="flex items-center gap-3">
+                <div className="text-center">
+                  <div className="font-mono text-3xl font-bold tracking-wider text-textMain">
+                    {formatTime(elapsedSeconds)}
+                  </div>
+                  <div className="text-xs text-textMuted mt-0.5 flex items-center gap-1 justify-center">
+                    <Clock className="w-3 h-3" />
+                    {formatTime(Math.max(0, TOTAL_EVENT_SECONDS - elapsedSeconds))} remaining
+                  </div>
+                </div>
+              </div>
+
+              {/* Control buttons */}
+              <div className="flex items-center gap-2">
+                {simState === 'idle' && (
+                  <button
+                    onClick={onStartSim}
+                    className="flex items-center gap-2 px-5 py-2.5 rounded-lg font-bold text-sm bg-gradient-to-r from-primary to-emerald-500 text-white hover:from-primary/90 hover:to-emerald-500/90 shadow-lg shadow-primary/20 transition-all hover:scale-105"
+                  >
+                    <Play className="w-4 h-4" />
+                    Start Event
+                  </button>
+                )}
+                {simState === 'running' && (
+                  <button
+                    onClick={onPauseSim}
+                    className="flex items-center gap-2 px-5 py-2.5 rounded-lg font-bold text-sm bg-gradient-to-r from-amber-500 to-orange-500 text-white hover:from-amber-500/90 hover:to-orange-500/90 shadow-lg shadow-amber-500/20 transition-all hover:scale-105"
+                  >
+                    <Pause className="w-4 h-4" />
+                    Pause
+                  </button>
+                )}
+                {simState === 'paused' && (
+                  <button
+                    onClick={onStartSim}
+                    className="flex items-center gap-2 px-5 py-2.5 rounded-lg font-bold text-sm bg-gradient-to-r from-primary to-emerald-500 text-white hover:from-primary/90 hover:to-emerald-500/90 shadow-lg shadow-primary/20 transition-all hover:scale-105"
+                  >
+                    <Play className="w-4 h-4" />
+                    Resume
+                  </button>
+                )}
+                {(simState === 'running' || simState === 'paused') && (
+                  <>
+                    {simResetConfirm ? (
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => {
+                            onResetSim();
+                            setSimResetConfirm(false);
+                          }}
+                          className="flex items-center gap-2 px-4 py-2.5 rounded-lg font-bold text-sm bg-red-500 text-white hover:bg-red-600 transition-all"
+                        >
+                          <AlertTriangle className="w-4 h-4" />
+                          Confirm Reset
+                        </button>
+                        <button
+                          onClick={() => setSimResetConfirm(false)}
+                          className="px-3 py-2.5 text-sm text-textMuted hover:text-textMain transition-colors"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setSimResetConfirm(true)}
+                        className="flex items-center gap-2 px-4 py-2.5 rounded-lg font-bold text-sm border border-red-500/30 text-red-400 hover:bg-red-500/10 transition-all"
+                      >
+                        <Square className="w-4 h-4" />
+                        Stop & Reset
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Skip-to controls (admin testing) */}
+            {simState !== 'idle' && (
+              <div className="flex items-center gap-3 flex-wrap">
+                <div className="flex items-center gap-1.5">
+                  <SkipForward className="w-4 h-4 text-textMuted" />
+                  <span className="text-xs font-semibold text-textMuted uppercase tracking-wider">Skip to:</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  {[
+                    { label: '29m', tick: 1740, desc: 'Before Flash 1' },
+                    { label: '30m', tick: 1800, desc: 'Flash 1' },
+                    { label: '59m', tick: 3540, desc: 'Before Flash 2' },
+                    { label: '1h', tick: 3600, desc: 'Flash 2' },
+                    { label: '89m', tick: 5340, desc: 'Before Flash 3' },
+                    { label: '1h30', tick: 5400, desc: 'Flash 3' },
+                  ].map((preset) => (
+                    <button
+                      key={preset.tick}
+                      onClick={() => onSkipTo(preset.tick)}
+                      title={preset.desc}
+                      className="px-2.5 py-1 rounded text-xs font-bold bg-surfaceElevated border border-border text-textMuted hover:text-textMain hover:border-primary/40 transition-all"
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="number"
+                    placeholder="min"
+                    min={0}
+                    max={120}
+                    value={skipMinutes}
+                    onChange={(e) => setSkipMinutes(e.target.value)}
+                    className="w-16 bg-surface border border-border rounded px-2 py-1 text-xs text-textMain focus:outline-none focus:border-primary/50"
+                  />
+                  <button
+                    onClick={() => {
+                      const mins = parseInt(skipMinutes);
+                      if (!isNaN(mins) && mins >= 0) {
+                        onSkipTo(mins * 60);
+                        setSkipMinutes('');
+                      }
+                    }}
+                    className="px-2.5 py-1 rounded text-xs font-bold bg-primary/10 text-primary border border-primary/30 hover:bg-primary/20 transition-all"
+                  >
+                    Go
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Progress bar */}
+            <div className="w-full">
+              <div className="w-full h-2 bg-surface rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all duration-1000 ease-linear ${
+                    simState === 'running'
+                      ? 'bg-gradient-to-r from-primary to-emerald-400'
+                      : simState === 'paused'
+                        ? 'bg-gradient-to-r from-amber-500 to-orange-400'
+                        : 'bg-border'
+                  }`}
+                  style={{ width: `${Math.min(100, (elapsedSeconds / TOTAL_EVENT_SECONDS) * 100)}%` }}
+                />
+              </div>
+              <div className="flex justify-between text-xs text-textMuted mt-1">
+                <span>0:00</span>
+                <span>0:30</span>
+                <span>1:00</span>
+                <span>1:30</span>
+                <span>2:00</span>
+              </div>
+            </div>
+          </div>
+        </Card>
+
+        {/* ─── Scheduled Events Timeline ─── */}
+        {simState !== 'idle' && (
+          <Card className="mb-8 bg-surface/50">
+            <div className="flex items-center gap-2 mb-4">
+              <Newspaper className="w-4 h-4 text-orange-400" />
+              <span className="text-sm font-semibold text-textMuted uppercase tracking-wider">Scheduled News Flashes</span>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {SCHEDULED_NEWS.map((sched) => {
+                const triggerMin = Math.floor(sched.triggerTick / 60);
+                const stopTick = sched.triggerTick + sched.durationTicks;
+                const isActive = elapsedSeconds >= sched.triggerTick && elapsedSeconds < stopTick;
+                const isCompleted = elapsedSeconds >= stopTick;
+                const isUpcoming = elapsedSeconds < sched.triggerTick;
+
+                return (
+                  <div
+                    key={sched.triggerTick}
+                    className={`rounded-lg p-3 border transition-all ${
+                      isActive
+                        ? 'bg-orange-500/10 border-orange-500/40 shadow-lg shadow-orange-500/5'
+                        : isCompleted
+                          ? 'bg-surfaceElevated border-border opacity-60'
+                          : 'bg-surfaceElevated border-border'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-bold text-textMuted">
+                        {triggerMin >= 60 ? `${Math.floor(triggerMin / 60)}h ${triggerMin % 60}m` : `${triggerMin}m`}
+                      </span>
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-xs font-bold ${
+                          isActive
+                            ? 'bg-orange-500/20 text-orange-400 animate-pulse'
+                            : isCompleted
+                              ? 'bg-surface text-textMuted'
+                              : 'bg-primary/10 text-primary'
+                        }`}
+                      >
+                        {isActive ? '● Active' : isCompleted ? '✓ Done' : '○ Upcoming'}
+                      </span>
+                    </div>
+                    <div className="text-xs text-textMuted mb-1">{sched.sector}</div>
+                    <div className="text-sm font-semibold text-textMain truncate mb-1">
+                      {sched.headline.split(':').slice(1).join(':').trim()}
+                    </div>
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-negative/10 text-negative rounded text-xs font-semibold">
+                        <TrendingDown className="w-3 h-3" />
+                        {sched.crashCompany} {sched.crashPercent}%
+                      </span>
+                      {sched.boostCompanies.map((sym) => (
+                        <span
+                          key={sym}
+                          className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-primary/10 text-primary rounded text-xs font-semibold"
+                        >
+                          <TrendingUp className="w-3 h-3" />
+                          {sym} +{sched.boostPercent}%
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </Card>
+        )}
+
         {/* Summary Stats */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
           <Card className="bg-gradient-to-br from-surface to-surfaceElevated">
@@ -227,14 +571,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
           </Card>
           <Card
-            className="bg-gradient-to-br from-surface to-surfaceElevated cursor-pointer hover:border-primary/40 transition-colors"
+            className="bg-gradient-to-br from-surface to-surfaceElevated cursor-pointer hover:border-primary/40 transition-colors relative overflow-hidden"
             onClick={() => setActiveView("users")}
           >
-            <div className="flex items-center gap-2 mb-2">
-              <Users className="w-4 h-4 text-blue-400" />
-              <span className="text-sm text-textMuted">Participants</span>
+            <div className="absolute top-0 right-0 p-4 opacity-10">
+              <Trophy className="w-16 h-16" />
             </div>
-            <div className="text-3xl font-bold text-blue-400">→</div>
+            <div className="flex items-center gap-2 mb-2">
+              <Trophy className="w-4 h-4 text-yellow-400" />
+              <span className="text-sm text-textMuted text-yellow-500/80 font-semibold tracking-wider uppercase">Top Participant</span>
+            </div>
+            {topParticipant ? (
+              <div className="flex flex-col">
+                <div className="text-2xl font-bold truncate pr-12">{topParticipant.name}</div>
+                <div className="text-sm font-mono text-primary flex items-center gap-1 mt-1">
+                  ₹{topParticipant.netWorth.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Net Worth
+                </div>
+              </div>
+            ) : (
+              <div className="text-xl text-textMuted">--</div>
+            )}
+            <div className="absolute bottom-4 right-4 text-blue-400/50">→</div>
           </Card>
         </div>
 

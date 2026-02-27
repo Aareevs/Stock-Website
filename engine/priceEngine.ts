@@ -1,5 +1,6 @@
-import { MarketItem, StockDataPoint, NewsEvent } from '../types';
+import { MarketItem, StockDataPoint } from '../types';
 import { getGraphPrice } from './graphPlaybackEngine';
+import type { NewsEvent } from '../hooks/useNews';
 
 /**
  * Advance a single stock by one tick using deterministic graph data.
@@ -24,15 +25,15 @@ export const tickPrice = (
     for (const event of activeNewsEvents) {
       if (!event.active) continue;
 
-      if (item.symbol === event.crashCompany) {
-        // crashPercent is already negative (e.g. -15)
-        const factor = 1 + event.crashPercent / 100;
+      if (item.symbol === event.crash_company) {
+        // crash_percent is already negative (e.g. -15)
+        const factor = 1 + event.crash_percent / 100;
         newPrice = parseFloat((newPrice * factor).toFixed(2));
         break;
       }
 
-      if (event.boostCompanies.includes(item.symbol)) {
-        const factor = 1 + event.boostPercent / 100;
+      if (event.boost_companies && event.boost_companies.includes(item.symbol)) {
+        const factor = 1 + event.boost_percent / 100;
         newPrice = parseFloat((newPrice * factor).toFixed(2));
         break;
       }
@@ -97,8 +98,8 @@ export const tickAllPrices = (
  */
 export const applyNewsEvent = (items: MarketItem[], event: NewsEvent): MarketItem[] => {
   return items.map(item => {
-    if (item.symbol === event.crashCompany) {
-      const factor = 1 + event.crashPercent / 100; // crashPercent is negative
+    if (item.symbol === event.crash_company) {
+      const factor = 1 + event.crash_percent / 100; // crash_percent is negative
       const newPrice = parseFloat((item.price * factor).toFixed(2));
       const newHistory: StockDataPoint[] = [
         ...(item.priceHistory || []).slice(-199),
@@ -117,8 +118,8 @@ export const applyNewsEvent = (items: MarketItem[], event: NewsEvent): MarketIte
       };
     }
 
-    if (event.boostCompanies.includes(item.symbol)) {
-      const factor = 1 + event.boostPercent / 100; // boostPercent is positive
+    if (event.boost_companies && event.boost_companies.includes(item.symbol)) {
+      const factor = 1 + event.boost_percent / 100; // boost_percent is positive
       const newPrice = parseFloat((item.price * factor).toFixed(2));
       const newHistory: StockDataPoint[] = [
         ...(item.priceHistory || []).slice(-199),
@@ -143,11 +144,10 @@ export const applyNewsEvent = (items: MarketItem[], event: NewsEvent): MarketIte
 
 /**
  * Stop a news event — revert affected stocks to Neutral sentiment.
- * Unchanged from original.
  */
 export const stopNewsEvent = (items: MarketItem[], event: NewsEvent): MarketItem[] => {
   return items.map(item => {
-    if (item.symbol === event.crashCompany || event.boostCompanies.includes(item.symbol)) {
+    if (item.symbol === event.crash_company || (event.boost_companies && event.boost_companies.includes(item.symbol))) {
       return { ...item, sentiment: 'Neutral' as const };
     }
     return item;
