@@ -23,20 +23,23 @@ export default defineConfig(({ mode }) => {
       sourcemap: false,
       rollupOptions: {
         output: {
+          entryFileNames: 'assets/[hash].js',
+          chunkFileNames: 'assets/[hash].js',
+          assetFileNames: 'assets/[hash][extname]',
           manualChunks(id) {
             // Vendor chunk splitting by package
             if (id.includes('node_modules')) {
               if (id.includes('recharts') || id.includes('d3-') || id.includes('victory-vendor')) {
-                return 'recharts';
+                return 'lib-charts';
               }
               if (id.includes('@supabase')) {
-                return 'supabase';
+                return 'lib-db';
               }
               if (id.includes('lucide-react')) {
-                return 'lucide';
+                return 'lib-icons';
               }
               // All other vendor libs (react, react-dom, etc.)
-              return 'vendor';
+              return 'lib-core';
             }
           },
         },
