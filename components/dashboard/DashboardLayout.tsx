@@ -219,6 +219,8 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
                   ?.avg_price || 0
               }
               onTrade={() => handleOpenTrade(liveSelectedStock)}
+              simState={simState}
+              elapsedSeconds={elapsedSeconds}
             />
           </Suspense>
         </main>
@@ -366,12 +368,12 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card className="bg-gradient-to-br from-surface to-surfaceElevated">
           <h3 className="text-sm text-textMuted mb-2">Market Status</h3>
-          <div className="text-2xl font-bold mb-1 flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />{" "}
-            Live
+          <div className={`text-2xl font-bold mb-1 flex items-center gap-2 ${simState === 'running' && elapsedSeconds < 7200 ? "" : "text-textMuted"}`}>
+            <span className={`w-2 h-2 rounded-full ${simState === 'running' && elapsedSeconds < 7200 ? "bg-primary animate-pulse" : "bg-red-500"}`} />{" "}
+            {simState === 'running' && elapsedSeconds < 7200 ? "Live" : "Inactive"}
           </div>
-          <div className="text-primary text-sm flex items-center gap-1">
-            Prices update real-time
+          <div className={`${simState === 'running' && elapsedSeconds < 7200 ? "text-primary" : "text-textMuted"} text-sm flex items-center gap-1`}>
+            {simState === 'running' && elapsedSeconds < 7200 ? "Prices update real-time" : "Market is closed"}
           </div>
         </Card>
         <Card className="bg-gradient-to-br from-surface to-surfaceElevated">
@@ -405,7 +407,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
                 <th className="pb-3">Change</th>
                 <th className="pb-3">Your Avg Price</th>
                 <th className="pb-3">Trend</th>
-                <th className="pb-3">Action</th>
+                <th className="pb-3 text-right pr-4">Action</th>
               </tr>
             </thead>
             <tbody className="text-sm">
@@ -469,11 +471,19 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
                         color={item.change >= 0 ? "#1ED3A6" : "#EF4444"}
                       />
                     </td>
-                    <td className="py-4">
+                    <td className="py-4 text-right pr-4">
                       <Button
                         size="sm"
+                        variant="secondary"
                         onClick={() => handleOpenTrade(item)}
-                        className="opacity-0 group-hover:opacity-100 transition-opacity"
+                        disabled={simState === "idle" || elapsedSeconds >= 7200}
+                        title={
+                          simState === "idle"
+                            ? "Trading hasn't started yet"
+                            : elapsedSeconds >= 7200
+                              ? "Event has concluded"
+                              : undefined
+                        }
                       >
                         Trade
                       </Button>
@@ -660,6 +670,14 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
                             size="sm"
                             variant="secondary"
                             onClick={() => handleOpenTrade(marketData!)}
+                            disabled={simState === "idle" || elapsedSeconds >= 7200}
+                            title={
+                              simState === "idle"
+                                ? "Trading hasn't started yet"
+                                : elapsedSeconds >= 7200
+                                  ? "Event has concluded"
+                                  : undefined
+                            }
                           >
                             Trade
                           </Button>
@@ -1056,7 +1074,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
           );
         })()}
 
-      <main className="flex-1 p-4 md:p-8 overflow-y-auto max-h-screen">
+      <main className="flex-1 p-4 pb-28 md:p-8 md:pb-8 overflow-y-auto max-h-screen">
         <header className="flex justify-between items-center mb-8">
           <div>
             <div className="flex items-center gap-3 mb-1">

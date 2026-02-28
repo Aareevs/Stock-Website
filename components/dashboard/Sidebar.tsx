@@ -35,7 +35,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   ];
 
   return (
-    <aside className="hidden md:flex flex-col w-20 lg:w-64 h-screen sticky top-0 border-r border-border bg-background pt-6 pb-4 transition-all duration-300">
+    <>
+    <aside className="hidden md:flex flex-col w-20 lg:w-64 h-screen sticky top-0 border-r border-border bg-background pt-6 pb-4 transition-all duration-300 z-40">
       <div className="px-3 mb-10 flex items-center justify-center lg:justify-start gap-2">
         <img src="/vsx-logo.png" alt="VSX" className="h-14 flex-shrink-0" />
         <span className="text-xs font-bold tracking-wider text-primary hidden lg:block uppercase">
@@ -96,5 +97,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
         )}
       </div>
     </aside>
+
+    {/* Mobile Bottom Navigation */}
+    <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-surface border-t border-border z-50 px-2 py-2 pb-6 sm:pb-2 flex justify-around items-center">
+      {navItems.map((item) => (
+        <button
+          key={item.label}
+          onClick={() => setActiveTab(item.label)}
+          className={`flex flex-col items-center justify-center w-full py-1 rounded-lg transition-colors ${
+            activeTab === item.label
+              ? "text-primary"
+              : "text-textMuted hover:text-textMain"
+          }`}
+        >
+          <item.icon className={`w-5 h-5 mb-1 ${activeTab === item.label ? 'animate-pulse' : ''}`} />
+          <span className="text-[10px] font-medium">{item.label === 'News Events' ? 'News' : item.label}</span>
+        </button>
+      ))}
+    </nav>
+    </>
   );
 };

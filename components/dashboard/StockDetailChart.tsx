@@ -35,6 +35,8 @@ interface StockDetailChartProps {
   ownedQty: number;
   avgPrice: number;
   onTrade: () => void;
+  simState: string;
+  elapsedSeconds: number;
 }
 
 export const StockDetailChart: React.FC<StockDetailChartProps> = ({
@@ -43,6 +45,8 @@ export const StockDetailChart: React.FC<StockDetailChartProps> = ({
   ownedQty,
   avgPrice,
   onTrade,
+  simState,
+  elapsedSeconds,
 }) => {
   const [timeframe, setTimeframe] = useState<Timeframe>("5m");
 
@@ -195,7 +199,18 @@ export const StockDetailChart: React.FC<StockDetailChartProps> = ({
 
       {/* Trade Button */}
       <div className="flex justify-center">
-        <Button onClick={onTrade} className="px-10 py-3 text-lg">
+        <Button 
+          onClick={onTrade} 
+          className="px-10 py-3 text-lg"
+          disabled={simState === "idle" || elapsedSeconds >= 7200}
+          title={
+            simState === "idle"
+              ? "Trading hasn't started yet"
+              : elapsedSeconds >= 7200
+                ? "Event has concluded"
+                : undefined
+          }
+        >
           Trade {stock.symbol}
         </Button>
       </div>

@@ -89,28 +89,46 @@ export const TradeModal: React.FC<TradeModalProps> = ({
 
           {/* Inputs */}
           <div className="space-y-4">
-             <div>
-                <label className="text-xs font-medium text-textMuted uppercase mb-1.5 block">Quantity</label>
-                <div className="relative">
+              <div>
+                <label className="text-xs font-medium text-textMuted uppercase mb-2 block flex justify-between">
+                  <span>Quantity</span>
+                  <span className="text-primary font-bold">{type === 'buy' ? `Max: ${Math.floor(balance / asset.price)}` : `Owned: ${ownedQuantity.toFixed(2)}`}</span>
+                </label>
+                
+                <div className="relative mb-3">
                    <input 
-                      type="number" 
+                      type="number"
                       min="0"
-                      step="0.01"
+                      step="any"
                       value={quantity}
                       onChange={(e) => setQuantity(e.target.value)}
-                      className="w-full bg-surface border border-border rounded-lg px-4 py-3 text-lg font-bold text-textMain focus:outline-none focus:border-primary/50"
+                      placeholder="0.00"
+                      className="w-full bg-surface border border-border rounded-xl pl-4 pr-20 py-4 text-2xl font-black text-textMain focus:outline-none focus:border-primary/50 transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                    />
-                   <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-textMuted font-medium">{asset.symbol}</span>
+                   <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-textMuted font-bold bg-surface pl-2">{asset.symbol}</span>
                 </div>
-                <div className="flex justify-between mt-2 text-xs">
-                   <span className="text-textMuted">Owned: {ownedQuantity.toFixed(2)} {asset.symbol}</span>
-                   <span className="text-textMuted">Max Buy: {Math.floor(balance / asset.price)}</span>
+
+                <div className="grid grid-cols-4 gap-2 mb-4">
+                  {[0.25, 0.5, 0.75, 1].map((percent) => {
+                    const maxPossible = type === 'buy' ? (balance / asset.price) : ownedQuantity;
+                    const calculatedQty = (maxPossible * percent).toFixed(2);
+                    
+                    return (
+                      <button
+                        key={percent}
+                        onClick={() => setQuantity(calculatedQty)}
+                        className="py-1.5 bg-surfaceElevated hover:bg-surfaceElevated/80 border border-border rounded-lg text-xs font-semibold text-textMuted hover:text-textMain transition-colors"
+                      >
+                        {percent === 1 ? 'MAX' : `${percent * 100}%`}
+                      </button>
+                    );
+                  })}
                 </div>
              </div>
 
              <div className="flex justify-between items-center py-4 border-t border-dashed border-border">
                 <span className="text-sm text-textMuted">Total Cost</span>
-                <span className="text-xl font-bold text-textMain font-mono">₹{total.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                <span className="text-2xl font-black text-textMain tracking-tight">₹{total.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
              </div>
 
              <div className="bg-surfaceElevated p-3 rounded-lg flex items-center justify-between">
