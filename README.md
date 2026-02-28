@@ -1,3 +1,12 @@
+<div align="center">
+  <img src="public/vedam-logo.png" alt="Vedam Logo" height="60" />
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="public/techfest-logo.png" alt="NOESIS Logo" height="60" />
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="public/vsx-logo.png" alt="VSX Logo" height="60" />
+</div>
+<br />
+
 # 📈 VSX: Buy or Bail
 
 **VSX: Buy or Bail** is a real-time virtual stock market simulation built for the **NOESIS Tech Fest**, hosted by **Vedam School of Technology**.
