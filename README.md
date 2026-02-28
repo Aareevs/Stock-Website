@@ -1,41 +1,55 @@
 # 📈 VSX: Buy or Bail
 
-**VSX: Buy or Bail** is a real-time virtual stock market simulation built for **NOESIS Tech Fest**, hosted by **Vedam School of Technology**. Participants compete by trading fictional stocks, reacting to live market news events, and building the most profitable portfolio — all within a sleek, interactive dashboard.
+**VSX: Buy or Bail** is a real-time virtual stock market simulation built for the **NOESIS Tech Fest**, hosted by **Vedam School of Technology**.
 
 ---
 
-## 🎯 What Is It?
+## 🎯 About the Event
 
-A competitive stock market simulation where participants start with ₹1,00,000 in virtual cash. Stocks tick every 5 seconds with realistic price movements influenced by market sentiment. Admins can trigger breaking news events that crash or boost specific companies — forcing players to make quick buy-or-bail decisions.
+"Buy or Bail" is an engaging, fast-paced financial simulation where students experience the adrenaline of a live trading floor. Participants start with a virtual balance of ₹1,00,000 and must use their financial acumen to trade stocks across various sectors.
+
+The catch? The market isn't just driven by random price fluctuations. Throughout the event, breaking news flashes are announced that instantly crash certain companies while boosting their competitors. Participants must stay on their toes—analyzing the news, predicting market reactions, and deciding whether to "Buy" the dip, or "Bail" before they lose their investment. The participant with the highest total net worth at the end of the simulation wins.
 
 ---
 
-## ✨ Features
+## 💻 About the Website & Flow of Events
 
-### For Participants
+The VSX platform provides a complete real-time trading ecosystem with two distinct experiences: one for the participants trading in the market, and one for the administrators controlling the simulation.
 
-- **Live Market Dashboard** — Real-time stock prices updating every 5 seconds with dynamic sparkline graphs
-- **Buy & Sell Stocks** — Trade 12 fictional Indian companies with a simple trade modal
-- **Portfolio Tracking** — Monitor holdings, average buy price, current value, and P&L in real time
-- **Stock Detail View** — Click any company for a full-screen price chart with Open/High/Low stats
-- **Transaction History** — Complete log of all your BUY and SELL trades
-- **Net Worth Tracking** — Cash balance + stock value combined into a total net worth
-- **Market News Feed** — Breaking news events with live impact indicators (crashing/benefiting companies)
-- **Toast Notifications** — Instant pop-up alerts when new market events are triggered
+### 🧑‍💼 Participant Flow
 
-### For Admins
+1. **Onboarding:** Participants log in to their dashboard and are greeted with a starting balance of ₹1,00,000.
+2. **Market Overview:** They can navigate through the **Overview**, **Markets**, and **Portfolio** tabs. The dashboard displays the live prices of 12 fictional companies, updating every 5 seconds.
+3. **Execution (Trading):**
+   - Participants analyze stock charts (with full-screen detail views available for deep-dives).
+   - They execute **BUY** or **SELL** orders seamlessly through a custom Trade Modal, which supports quick-select percentages (25%, 50%, Max).
+   - Their Portfolio dynamically tracks their holdings, average buy prices, and real-time Profit/Loss.
+4. **Reacting to News (The Twist):**
+   - Periodically, the screen will flash with a **Breaking News Alert** (e.g., a CEO stepping down or a massive security breach).
+   - A red banner appears across the screen, detailing which company is crashing (e.g., -15%) and which competitors are boosting.
+   - A 15-minute countdown begins. Participants must rapidly execute trades to capitalize on the new market conditions before the news flash expires and prices normalize.
+5. **Endgame:** Once the simulation time limit is reached, the market closes. Trading is disabled, and final net worths are calculated to determine the winner.
 
-- **Admin Dashboard** — Protected panel accessible only to authorized admin accounts
-- **News Flash System** — Create breaking news events that instantly crash one company and boost competitors
-- **Live Market Overview** — Monitor all stock prices and sparklines from the admin panel
-- **Event Management** — Activate/deactivate news events to control market dynamics
+### 👑 Admin Flow
 
-### Technical
+1. **Control Center:** The Admin logs into a protected dashboard to oversee the entire event.
+2. **Simulation Management:**
+   - The Admin has master controls to **Start**, **Pause**, or **Reset** the market simulation.
+   - The Admin can jump the simulation time forward to skip quiet periods.
+3. **Triggering Events:**
+   - The Admin has a pre-scheduled timeline of major news events. As the simulation clock ticks, the system automatically triggers these events.
+   - The Admin can also manually trigger spontaneous news flashes by selecting a company to crash, setting the crash percentage, and selecting rival companies to boost.
+4. **Monitoring:** A live leaderboard constantly tracks all participants' net worths, allowing the Admin to see who is currently winning without refreshing the page.
+5. **Resetting:** At the end of a round, the Admin can click "Reset Auction" to instantly wipe all participant portfolios and reset cash balances back to ₹1,00,000 for the next batch of players.
 
-- **Real-time Price Engine** — Client-side price ticking with sentiment-based volatility (Bullish/Bearish/Neutral)
-- **Supabase Realtime** — Instant push updates for admin-triggered events via PostgreSQL changes
-- **Authentication** — Email/password sign-up and login with auto-generated user profiles
-- **Responsive Design** — Works across desktop and mobile devices
+---
+
+## ✨ Technical Features
+
+- **Real-time Price Engine:** Client-side price ticking with sentiment-based volatility metrics.
+- **Supabase Realtime Sync:** Instant push updates for admin-triggered events using PostgreSQL WebSockets.
+- **Dynamic UI:** Built with React 19 and Tailwind CSS, featuring pulsing status indicators, real-time charts via Recharts, and immersive breaking news banners.
+- **Authentication:** Secure email/password login integrated with Supabase Auth.
 
 ---
 
@@ -48,12 +62,12 @@ A competitive stock market simulation where participants start with ₹1,00,000 
 | **Build Tool**          | Vite 6                                  |
 | **Backend / Auth / DB** | Supabase (PostgreSQL + Auth + Realtime) |
 | **Charting**            | Recharts                                |
-| **Icons**               | Lucide React                            |
+| **Styling**             | Tailwind CSS                            |
 | **Deployment**          | Vercel                                  |
 
 ---
 
-## 📂 Project Structure
+## � Project Structure
 
 ```
 ├── App.tsx                  # Main app — auth flow, routing, data fetching
@@ -104,7 +118,7 @@ A competitive stock market simulation where participants start with ₹1,00,000 
 
 ---
 
-## 🚀 Getting Started
+## �🚀 Getting Started
 
 ### Prerequisites
 
@@ -150,17 +164,6 @@ Open [http://localhost:5173](http://localhost:5173) in your browser.
 npm run build
 npm run preview
 ```
-
----
-
-## 🎮 How It Works
-
-1. **Participants sign up** with a username and password, starting with ₹1,00,000
-2. **12 fictional stocks** tick every 5 seconds with realistic volatility
-3. **Players buy and sell** stocks to grow their portfolio value
-4. **Admins trigger news events** — a company crashes while competitors surge
-5. **Players react** — buy the dip, sell the panic, or bail entirely
-6. **Highest net worth wins** at the end of the event
 
 ---
 
