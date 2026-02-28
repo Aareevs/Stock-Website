@@ -44,17 +44,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </span>
       </div>
 
-      <div className="px-4 mb-6 hidden lg:block">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-textMuted" />
-          <input
-            type="text"
-            placeholder="Search..."
-            className="w-full bg-surface border border-border rounded-lg pl-10 pr-4 py-2 text-sm text-textMain placeholder:text-textMuted focus:outline-none focus:border-primary/50 transition-colors"
-          />
-        </div>
-      </div>
-
       <nav className="flex-1 px-3 space-y-1">
         {navItems.map((item) => (
           <button

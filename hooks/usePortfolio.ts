@@ -87,57 +87,35 @@ export function usePortfolio(userId: string | undefined) {
     currentBalance: number,
     purchasePrice?: number
   ): Promise<{ error: string | null }> => {
-    const totalCost = quantity * price;
+    
+    // Call the atomic postgres function to prevent negative balance/holdings race conditions
+    const { data, error } = await supabase.rpc('execute_trade', {
+      p_user_id: userId,
+      p_symbol: symbol,
+      p_asset_name: assetName,
+      p_type: type,
+      p_quantity: quantity,
+      p_price: price
+    });
 
-    if (type === 'BUY') {
-      if (totalCost > currentBalance) return { error: 'Insufficient funds' };
-
-      // Update balance
-      const newBalance = currentBalance - totalCost;
-      await supabase.from('profiles').update({ cash_balance: newBalance }).eq('id', userId);
-
-      // Upsert portfolio
-      const existing = portfolio.find(p => p.symbol === symbol);
-      if (existing) {
-        const newAmount = existing.amount + quantity;
-        const newAvg = ((existing.avg_price * existing.amount) + (price * quantity)) / newAmount;
-        await supabase.from('portfolios').update({ amount: newAmount, avg_price: +newAvg.toFixed(2) }).eq('id', existing.id);
-        setPortfolio(prev => prev.map(p => p.id === existing.id ? { ...p, amount: newAmount, avg_price: +newAvg.toFixed(2) } : p));
-      } else {
-        const { data } = await supabase.from('portfolios').insert({ user_id: userId, symbol, amount: quantity, avg_price: price }).select().single();
-        if (data) setPortfolio(prev => [...prev, data as PortfolioItem]);
-      }
-
-      // Log transaction
-      const { data: tx } = await supabase.from('transactions').insert({
-        user_id: userId, symbol, asset_name: assetName, type: 'BUY', quantity, price,
-      }).select().single();
-      if (tx) setTransactions(prev => [tx as Transaction, ...prev]);
-
-    } else {
-      // SELL
-      const existing = portfolio.find(p => p.symbol === symbol);
-      if (!existing || existing.amount < quantity) return { error: 'Not enough shares' };
-
-      const newBalance = currentBalance + totalCost;
-      const profitLoss = (price - (purchasePrice || existing.avg_price)) * quantity;
-      await supabase.from('profiles').update({ cash_balance: newBalance }).eq('id', userId);
-
-      const newAmount = existing.amount - quantity;
-      if (newAmount === 0) {
-        await supabase.from('portfolios').delete().eq('id', existing.id);
-        setPortfolio(prev => prev.filter(p => p.id !== existing.id));
-      } else {
-        await supabase.from('portfolios').update({ amount: newAmount }).eq('id', existing.id);
-        setPortfolio(prev => prev.map(p => p.id === existing.id ? { ...p, amount: newAmount } : p));
-      }
-
-      const { data: tx } = await supabase.from('transactions').insert({
-        user_id: userId, symbol, asset_name: assetName, type: 'SELL', quantity, price,
-        purchase_price: purchasePrice || existing.avg_price, profit_loss: +profitLoss.toFixed(2),
-      }).select().single();
-      if (tx) setTransactions(prev => [tx as Transaction, ...prev]);
+    if (error) {
+      console.error('[executeTrade RPC Error]:', error);
+      return { error: 'Transaction failed on the server. Please try again.' };
     }
+
+    if (data && !data.success) {
+      return { error: data.error || 'Transaction denied.' };
+    }
+
+    // After a successful trade, force an immediate refresh of the local state 
+    // to instantly update the UI (the 5s polling will catch anything else)
+    const [{ data: pData }, { data: tData }] = await Promise.all([
+      supabase.from('portfolios').select('*').eq('user_id', userId),
+      supabase.from('transactions').select('*').eq('user_id', userId).order('created_at', { ascending: false }),
+    ]);
+
+    if (pData) setPortfolio(pData as PortfolioItem[]);
+    if (tData) setTransactions(tData as Transaction[]);
 
     return { error: null };
   };

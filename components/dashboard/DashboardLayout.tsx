@@ -260,11 +260,11 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
         <div className="flex items-end gap-4 mb-6">
           <div>
             <span className="text-sm text-textMuted block mb-1">
-              Total Net Worth
+              Cash Balance
             </span>
             <span className="text-4xl md:text-6xl font-bold text-textMain">
               ₹
-              {totalNetWorth.toLocaleString("en-IN", {
+              {balance.toLocaleString("en-IN", {
                 minimumFractionDigits: 2,
                 maximumFractionDigits: 2,
               })}

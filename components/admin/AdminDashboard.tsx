@@ -58,6 +58,21 @@ interface AdminDashboardProps {
 
 const TOTAL_EVENT_SECONDS = 7200; // 2 hours
 
+const COMPANY_LOGOS: Record<string, string> = {
+  VELOCITY: "/VelocityAuto.png",
+  APEXAUTO: "/ApexAutomotive.png",
+  CRUISER: "/CruiserDynamics.png",
+  VITALIS: "/VitalisHealth.png",
+  CAREPLUS: "/CarePlus.png",
+  MEDISURG: "/Medisurge Pharma.png",
+  EDUNEXT: "/EduNext.png",
+  SCHOLAR: "/ScholarStream.png",
+  BRAINB: "/BrainBoost.png",
+  FRESHC: "/FreshCrave Foods.png",
+  SPICER: "/SpiceRoute Dining.png",
+  URBANB: "/UrbanBites.png",
+};
+
 /** Format seconds as HH:MM:SS */
 function formatTime(totalSeconds: number): string {
   const h = Math.floor(totalSeconds / 3600);
@@ -162,7 +177,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       mounted = false;
       clearInterval(interval);
     };
-  }, []);
+  }, [marketItems]);
   const [selectedChart, setSelectedChart] = useState<MarketItem | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [isResetting, setIsResetting] = useState(false);
@@ -676,12 +691,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     onClick={() => setSelectedChart(item)}
                   >
                     <div className="flex justify-between items-start mb-2">
-                      <div>
-                        <div className="font-semibold text-textMain">
-                          {item.name}
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-surfaceElevated border border-border flex items-center justify-center overflow-hidden flex-shrink-0">
+                          <img
+                            src={COMPANY_LOGOS[item.symbol] || ""}
+                            alt={item.name}
+                            className="w-full h-full object-cover"
+                          />
                         </div>
-                        <div className="text-xs text-textMuted">
-                          {item.symbol}
+                        <div>
+                          <div className="font-semibold text-textMain leading-tight">
+                            {item.name}
+                          </div>
+                          <div className="text-xs text-textMuted">
+                            {item.symbol}
+                          </div>
                         </div>
                       </div>
                       <div className="text-right">
