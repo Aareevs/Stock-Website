@@ -109,68 +109,56 @@ const App: React.FC = () => {
   }, [simState]);
 
   // Auto-trigger and auto-stop scheduled events
-  // Only depends on elapsedSeconds and simState — uses refs for everything else
   useEffect(() => {
-    if (simState !== 'running' || !user) return;
+    // ONLY the admin client should serve as the "cron" to prevent multiple clients from triggering identical events.
+    // We MUST also wait for newsLoading to finish. Otherwise, on a page refresh, we'll evaluate 
+    // before we've fetched the existing database state, falsely assuming the event hasn't fired yet!
+    if (simState !== 'running' || !user || profile?.role !== 'admin' || newsLoading) return;
 
     for (const scheduled of SCHEDULED_NEWS) {
       const endTick = scheduled.triggerTick + scheduled.durationTicks;
+      
+      // Check database state directly rather than relying purely on volatile React refs.
+      // This survives admin page reloads and cross-device syncs.
+      const existingEvents = newsEventsRef.current.filter(e => e.headline === scheduled.headline);
 
-      // ─── Case 1: Event is fully in the past (skipped past it) ───
-      // Mark as done without actually firing — it's already over
-      if (
-        elapsedSeconds >= endTick &&
-        !triggeredRef.current.has(scheduled.triggerTick)
-      ) {
-        triggeredRef.current.add(scheduled.triggerTick);
-        stoppedRef.current.add(scheduled.triggerTick);
-        continue; // Skip — don't fire a past event
+      // ─── Case 1: Event is fully in the past or just ended ───
+      if (elapsedSeconds >= endTick) {
+        let stoppedAny = false;
+        existingEvents.forEach(existingEvent => {
+          if (existingEvent.active && !stoppedRef.current.has(scheduled.triggerTick)) {
+            stoppedAny = true;
+            stopNewsRef.current(existingEvent.id, existingEvent, marketItemsRef.current).catch(err => {
+              console.error('[AutoNews] Failed to stop past event:', err);
+            });
+          }
+        });
+        if (stoppedAny) {
+          stoppedRef.current.add(scheduled.triggerTick);
+        }
+        continue;
       }
 
       // ─── Case 2: Currently inside the event's active window ───
-      // Trigger if not already triggered
-      if (
-        elapsedSeconds >= scheduled.triggerTick &&
-        elapsedSeconds < endTick &&
-        !triggeredRef.current.has(scheduled.triggerTick)
-      ) {
-        triggeredRef.current.add(scheduled.triggerTick);
-        triggerNewsRef.current(
-          scheduled.headline,
-          scheduled.crashCompany,
-          scheduled.crashPercent,
-          scheduled.boostCompanies,
-          scheduled.boostPercent,
-          marketItemsRef.current,
-          user.id,
-        ).then((result) => {
-          if (result.event) {
-            scheduledEventIdsRef.current.set(scheduled.triggerTick, result.event.id);
-          }
-        }).catch((err) => {
-          console.error('[AutoNews] Failed to trigger scheduled event:', err);
-        });
-      }
-
-      // ─── Case 3: Auto-stop when duration expires ───
-      if (
-        elapsedSeconds >= endTick &&
-        triggeredRef.current.has(scheduled.triggerTick) &&
-        !stoppedRef.current.has(scheduled.triggerTick)
-      ) {
-        stoppedRef.current.add(scheduled.triggerTick);
-        const eventId = scheduledEventIdsRef.current.get(scheduled.triggerTick);
-        if (eventId) {
-          const event = newsEventsRef.current.find(e => e.id === eventId);
-          if (event && event.active) {
-            stopNewsRef.current(eventId, event, marketItemsRef.current).catch((err) => {
-              console.error('[AutoNews] Failed to stop scheduled event:', err);
-            });
-          }
+      if (elapsedSeconds >= scheduled.triggerTick && elapsedSeconds < endTick) {
+        const hasActiveEvent = existingEvents.some(e => e.active);
+        if (!hasActiveEvent && !triggeredRef.current.has(scheduled.triggerTick)) {
+          triggeredRef.current.add(scheduled.triggerTick);
+          triggerNewsRef.current(
+            scheduled.headline,
+            scheduled.crashCompany,
+            scheduled.crashPercent,
+            scheduled.boostCompanies,
+            scheduled.boostPercent,
+            marketItemsRef.current,
+            user.id,
+          ).catch((err) => {
+            console.error('[AutoNews] Failed to trigger scheduled event:', err);
+          });
         }
       }
     }
-  }, [elapsedSeconds, simState, user]);
+  }, [elapsedSeconds, simState, user, profile?.role, newsLoading]);
 
   // Show loading state
   if (authLoading || marketLoading) {

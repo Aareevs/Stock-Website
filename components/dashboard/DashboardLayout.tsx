@@ -198,6 +198,8 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
           }}
           onOpenAdmin={onOpenAdmin}
           currentUserName={profile.display_name}
+          simState={simState}
+          elapsedSeconds={elapsedSeconds}
         />
         <main className="flex-1 p-4 md:p-8 overflow-y-auto max-h-screen">
           <Suspense
